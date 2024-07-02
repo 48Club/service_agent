@@ -100,5 +100,10 @@ func proxyHandler(c *gin.Context, body []byte, isOriginal bool) {
 		c.AbortWithStatus(http.StatusBadGateway)
 	}
 
+	proxy.ModifyResponse = func(resp *http.Response) error {
+		resp.Header.Add("Powered-By", "48Club")
+		return nil
+	}
+
 	proxy.ServeHTTP(c.Writer, c.Request)
 }
