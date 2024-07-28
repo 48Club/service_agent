@@ -1,4 +1,4 @@
-package main
+package types
 
 type Web3ClientRequest struct {
 	JsonRPC string      `json:"jsonrpc"`

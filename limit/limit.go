@@ -4,13 +4,25 @@ import (
 	"container/list"
 	"encoding/json"
 	"fmt"
-	"log"
 	"service_agent/redis"
 	"sync"
 	"time"
 
 	redis9 "github.com/redis/go-redis/v9"
 )
+
+var (
+	Limits IPBasedRateLimiters
+)
+
+func init() {
+	Limits = IPBasedRateLimiters{
+		NewIPBasedRateLimiter(80, time.Second*5, "5s"),     // 16qps
+		NewIPBasedRateLimiter(720, time.Minute, "1m"),      // 12qps
+		NewIPBasedRateLimiter(28800, time.Hour, "1h"),      // 8qps
+		NewIPBasedRateLimiter(345600, time.Hour*24, "24h"), // 4qps
+	}
+}
 
 type SlidingWindowRateLimiter struct {
 	mu         sync.Mutex
@@ -167,10 +179,7 @@ func (iprls IPBasedRateLimiters) LoadFromCache() error {
 		if err := json.Unmarshal([]byte(b), &redisSaves); err != nil {
 			return err
 		}
-		for _index, _redisSave := range redisSaves {
-			if _redisSave.IP == "127.0.0.1" {
-				log.Println(_index, _redisSave)
-			}
+		for _, _redisSave := range redisSaves {
 			rl := NewSlidingWindowRateLimiter(iprl.limit, iprl.window, iprl.window2)
 			for _, _t := range _redisSave.Timestamps {
 				t := time.Unix(_t, 0)

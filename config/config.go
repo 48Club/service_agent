@@ -1,4 +1,4 @@
-package main
+package config
 
 import (
 	"encoding/json"
@@ -9,25 +9,26 @@ type Config struct {
 	Sentry        string              `json:"sentry"` // 哨兵节点
 	Original      string              `json:"original"`
 	Nginx         string              `json:"nginx"`
+	Puissant      string              `json:"puissant"`
 	DomainsHelper []string            `json:"domains"` // 域名列表
 	Domains       map[string]struct{} `json:"-"`       // 域名列表, 用于快速查找
 }
 
-var globalConfig = Config{}
+var GlobalConfig = Config{}
 
-func loadConfig(f string) {
-	file, err := os.ReadFile(f)
+func init() {
+	file, err := os.ReadFile("config.json")
 	if err != nil {
 		panic(err)
 	}
 
-	err = json.Unmarshal(file, &globalConfig)
+	err = json.Unmarshal(file, &GlobalConfig)
 	if err != nil {
 		panic(err)
 	}
 
-	globalConfig.Domains = map[string]struct{}{}
-	for _, domain := range globalConfig.DomainsHelper {
-		globalConfig.Domains[domain] = struct{}{}
+	GlobalConfig.Domains = map[string]struct{}{}
+	for _, domain := range GlobalConfig.DomainsHelper {
+		GlobalConfig.Domains[domain] = struct{}{}
 	}
 }
