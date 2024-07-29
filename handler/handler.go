@@ -148,14 +148,16 @@ func AnyHandler(c *gin.Context) {
 	}
 
 	switch c.Request.Method {
+	case http.MethodHead:
+		fallthrough
+	case http.MethodOptions:
+		c.AbortWithStatus(http.StatusNoContent)
 	case http.MethodPost:
 		if c.Request.Host == "rpc-bsc.48.club" && c.Request.URL.Path == "/erigon/" {
 			proxyHandler(c, body, config.GlobalConfig.Nginx)
 			return
 		}
 		postHandler(c, body)
-	case http.MethodOptions:
-		c.AbortWithStatus(http.StatusOK)
 	case http.MethodGet:
 		if c.Request.URL.Path == "/ws/" && c.Request.Header.Get("Upgrade") == "websocket" {
 			if c.Request.Host == "puissant-bsc.48.club" {
