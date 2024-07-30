@@ -104,9 +104,6 @@ func LimitMiddleware(c *gin.Context) {
 	if c.Request.Header.Get("Upgrade") == "websocket" && c.Request.Method == http.MethodGet {
 		return // websocket 不在此处限流
 	}
-	if c.Request.Host == "ipfs.48.club" { // ipfs 服务不限流
-		return
-	}
 
 	ip := c.ClientIP()
 	jsonLimit, jsonRemaining, tooManyRequests := LimitMiddleware2(ip)
