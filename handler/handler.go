@@ -161,10 +161,7 @@ func AnyHandler(c *gin.Context) {
 		postHandler(c, body)
 	case http.MethodGet:
 		if c.Request.URL.Path == "/ws/" && c.Request.Header.Get("Upgrade") == "websocket" {
-			if c.Request.Host == "puissant-bsc.48.club" {
-				handleWebSocket(c, config.GlobalConfig.Puissant)
-				return
-			} else if c.GetBool("isRpc") {
+			if c.GetBool("isRpc") {
 				handleWebSocket(c, fmt.Sprintf("ws://%s", strings.Split(config.GlobalConfig.Original, "://")[1]))
 				return
 			}

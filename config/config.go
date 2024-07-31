@@ -9,7 +9,6 @@ type Config struct {
 	Sentry        string              `json:"sentry"` // 哨兵节点
 	Original      string              `json:"original"`
 	Nginx         string              `json:"nginx"`
-	Puissant      string              `json:"puissant"`
 	DomainsHelper []string            `json:"domains"` // 域名列表
 	Domains       map[string]struct{} `json:"-"`       // 域名列表, 用于快速查找
 }
