@@ -21,8 +21,7 @@ var upgrader = websocket.Upgrader{
 	},
 }
 
-func handleWebSocket(c *gin.Context, toHost string, isRpc bool) {
-	ip := c.ClientIP()
+func handleWebSocket(c *gin.Context, toHost string) {
 	ctx, cancelCtx := context.WithCancel(context.Background())
 	defer cancelCtx()
 
@@ -57,6 +56,7 @@ func handleWebSocket(c *gin.Context, toHost string, isRpc bool) {
 	}
 
 	go func() {
+		isRpc, ip := c.GetBool("isRpc"), c.ClientIP()
 		defer cancelConn(proxyConn)
 		for {
 			select {
@@ -78,15 +78,15 @@ func handleWebSocket(c *gin.Context, toHost string, isRpc bool) {
 				limit.Limits.AllowPassCheck(ip)
 
 				if isRpc && messageType == websocket.TextMessage {
-					if web3Reqi, hasGasPrice, hasSendRawTransaction, err := tools.DecodeRequestBody(message); err == nil {
+					if web3Reqi, hasGasPrice, mustSend2Sentry, err := tools.DecodeRequestBody(isRpc, message); err == nil {
 						if hasGasPrice {
 							if err := conn.WriteJSON(tools.GetGasPrice(web3Reqi)); err != nil {
 								log.Println("Write error to client:", err)
 								return
 							}
 							continue
-						} else if hasSendRawTransaction {
-							msg, err := ethclient.SendRawTransaction(message)
+						} else if mustSend2Sentry {
+							msg, err := ethclient.Send2Sentry(message)
 							if err != nil {
 								_ = conn.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseInternalServerErr, err.Error()))
 								return

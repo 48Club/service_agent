@@ -21,7 +21,7 @@ func init() {
 	httpClient = hc
 }
 
-func SendRawTransaction(data []byte) ([]byte, error) {
+func Send2Sentry(data []byte) ([]byte, error) {
 	resp, err := httpClient.Post(config.GlobalConfig.Sentry, "application/json", bytes.NewReader(data))
 	if err != nil {
 		return nil, err

@@ -137,6 +137,10 @@ func LimitMiddleware2(ip string) (string, string, bool) {
 }
 
 func AnyHandler(c *gin.Context) {
+	_, ok := config.GlobalConfig.Domains[c.Request.Host]
+	if ok {
+		c.Set("isRpc", true)
+	}
 
 	var body = []byte{}
 	if c.Request.ContentLength != 0 {
@@ -158,10 +162,10 @@ func AnyHandler(c *gin.Context) {
 	case http.MethodGet:
 		if c.Request.URL.Path == "/ws/" && c.Request.Header.Get("Upgrade") == "websocket" {
 			if c.Request.Host == "puissant-bsc.48.club" {
-				handleWebSocket(c, config.GlobalConfig.Puissant, false)
+				handleWebSocket(c, config.GlobalConfig.Puissant)
 				return
-			} else if _, ok := config.GlobalConfig.Domains[c.Request.Host]; ok {
-				handleWebSocket(c, fmt.Sprintf("ws://%s", strings.Split(config.GlobalConfig.Original, "://")[1]), true)
+			} else if c.GetBool("isRpc") {
+				handleWebSocket(c, fmt.Sprintf("ws://%s", strings.Split(config.GlobalConfig.Original, "://")[1]))
 				return
 			}
 		}
@@ -173,14 +177,13 @@ func AnyHandler(c *gin.Context) {
 
 // postHandler 处理 POST 请求
 func postHandler(c *gin.Context, body []byte) {
-	_, ok := config.GlobalConfig.Domains[c.Request.Host]
-	if !ok {
-		// 不在域名列表, 直接交给 nginx 处理
-		proxyHandler(c, body, config.GlobalConfig.Nginx)
+	if c.GetBool("isRpc") {
+		rpcHandler(c, body)
 		return
 	}
 
-	rpcHandler(c, body)
+	// 不在域名列表, 直接交给 nginx 处理
+	proxyHandler(c, body, config.GlobalConfig.Nginx)
 }
 
 func ethGasPriceHandler(c *gin.Context, i interface{}) {
@@ -189,14 +192,13 @@ func ethGasPriceHandler(c *gin.Context, i interface{}) {
 
 // rpcHandler 处理 geth JSON-RPC 请求
 func rpcHandler(c *gin.Context, body []byte) {
-
-	web3Reqi, hasGasPrice, hasSendRawTransaction, err := tools.DecodeRequestBody(body)
+	web3Reqi, hasGasPrice, mustSend2Sentry, err := tools.DecodeRequestBody(c.GetBool("isRpc"), body)
 	if err != nil {
 		c.AbortWithStatus(http.StatusBadRequest)
 		return
 	}
 
-	if hasSendRawTransaction {
+	if mustSend2Sentry {
 		proxyHandler(c, body, config.GlobalConfig.Sentry)
 	} else if hasGasPrice {
 		ethGasPriceHandler(c, web3Reqi)
