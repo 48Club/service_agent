@@ -15,9 +15,14 @@ var toSentryMethod = map[string]struct{}{
 	"eth_sendBatchRawTransaction": {},
 }
 
-func hasMethod(t types.Web3ClientRequest) bool {
-	_, ok := toSentryMethod[t.Method]
-	return ok
+func hasMethod(t types.Web3ClientRequests) bool {
+	for _, v := range t {
+		_, ok := toSentryMethod[v.Method]
+		if ok {
+			return true
+		}
+	}
+	return false
 }
 
 func checkMethodType(body []byte) byte {
@@ -34,27 +39,18 @@ func DecodeRequestBody(isRpc bool, body []byte) (i interface{}, hasGasPrice, mus
 	case 123: // {
 		var web3Req types.Web3ClientRequest
 		err = json.Unmarshal(body, &web3Req)
-		if err != nil {
-			return nil, false, false, err
+		if err == nil {
+			return web3Req, isRpc && web3Req.Method == "eth_gasPrice", hasMethod(types.Web3ClientRequests{web3Req}), nil
 		}
-		return web3Req, isRpc && web3Req.Method == "eth_gasPrice", hasMethod(web3Req), nil
 	case 91: // [
 		var web3Reqs types.Web3ClientRequests
 		err = json.Unmarshal(body, &web3Reqs)
-		if err != nil {
-			return nil, false, false, err
+		if err == nil {
+			return web3Reqs, isRpc && len(web3Reqs) == 1 && web3Reqs[0].Method == "eth_gasPrice", hasMethod(web3Reqs), nil
 		}
-		return web3Reqs, len(web3Reqs) == 1 && web3Reqs[0].Method == "eth_gasPrice", func() bool {
-			for _, _web3Reqs := range web3Reqs {
-				if isRpc && hasMethod(_web3Reqs) {
-					return true
-				}
-			}
-			return false
-		}(), nil
-	default:
-		return nil, false, false, errors.New("invalid request body")
 	}
+
+	return nil, false, false, errors.New("invalid request")
 }
 
 var (
