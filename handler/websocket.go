@@ -22,7 +22,7 @@ var upgrader = websocket.Upgrader{
 }
 
 func handleWebSocket(c *gin.Context, toHost string) {
-	ctx, cancelCtx := context.WithCancel(context.Background())
+	ctx, cancelCtx := context.WithCancel(c.Request.Context())
 	defer cancelCtx()
 
 	// 将请求升级为 WebSocket 连接

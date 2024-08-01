@@ -48,9 +48,11 @@ func DecodeRequestBody(isRpc bool, body []byte) (i interface{}, hasGasPrice, mus
 		if err == nil {
 			return web3Reqs, isRpc && len(web3Reqs) == 1 && web3Reqs[0].Method == "eth_gasPrice", hasMethod(web3Reqs), nil
 		}
+	default:
+		err = errors.New("invalid request")
 	}
 
-	return nil, false, false, errors.New("invalid request")
+	return nil, false, false, err
 }
 
 var (
