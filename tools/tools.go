@@ -4,8 +4,8 @@ import (
 	"encoding/json"
 	"errors"
 	"math/big"
-	"service_agent/types"
 
+	"github.com/48Club/service_agent/types"
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/gin-gonic/gin"
 )

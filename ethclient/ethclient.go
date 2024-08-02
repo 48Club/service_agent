@@ -4,8 +4,9 @@ import (
 	"bytes"
 	"io"
 	"net/http"
-	"service_agent/config"
 	"time"
+
+	"github.com/48Club/service_agent/config"
 )
 
 var httpClient *http.Client

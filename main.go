@@ -6,12 +6,12 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
-	"service_agent/cloudflare"
-	"service_agent/handler"
-	"service_agent/limit"
 	"syscall"
 	"time"
 
+	"github.com/48Club/service_agent/cloudflare"
+	"github.com/48Club/service_agent/handler"
+	"github.com/48Club/service_agent/limit"
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 )

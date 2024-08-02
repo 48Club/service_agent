@@ -9,12 +9,12 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"net/url"
-	"service_agent/config"
-	"service_agent/limit"
-	"service_agent/tools"
 	"strings"
 	"time"
 
+	"github.com/48Club/service_agent/config"
+	"github.com/48Club/service_agent/limit"
+	"github.com/48Club/service_agent/tools"
 	mapset "github.com/deckarep/golang-set/v2"
 	"github.com/gin-gonic/gin"
 )

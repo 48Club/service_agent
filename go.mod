@@ -1,4 +1,4 @@
-module service_agent
+module github.com/48Club/service_agent
 
 go 1.22.0
 
