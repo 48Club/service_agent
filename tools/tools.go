@@ -1,7 +1,6 @@
 package tools
 
 import (
-	"container/list"
 	"context"
 	"encoding/json"
 	"errors"
@@ -106,54 +105,62 @@ func EthResp(i, resp interface{}) interface{} {
 }
 
 var (
-	CfLimit           *list.List = list.New()
-	cloudflareAccount            = config.GlobalConfig.Cloudflare
+	channels          chan string       = make(chan string, 1)
+	cloudflareAccount config.Cloudflare = config.GlobalConfig.Cloudflare
+	api               *cloudflare.API
 )
 
-func BlockIP(ip string) {
+func init() {
+	if cloudflareAccount.Email == "" || cloudflareAccount.Key == "" || cloudflareAccount.Account == "" {
+		log.Panic("cloudflare account not set")
+	}
 
-WAIT_1S:
-	now := time.Now()
-	for CfLimit.Len() > 0 {
-		front := CfLimit.Front()
-		if now.Sub(front.Value.(time.Time)) < 5*time.Minute {
-			break
+	_api, err := cloudflare.New(cloudflareAccount.Key, cloudflareAccount.Email)
+	if err != nil {
+		log.Panic("cloudflare.New err:", err)
+	}
+
+	api = _api
+
+	go doBlockIP()
+}
+
+func doBlockIP() {
+	tc := time.NewTicker(250 * time.Millisecond)
+	for {
+		<-tc.C
+		ip := <-channels
+
+		target := "ip"
+		if strings.Index(ip, ":") > 0 {
+			target = "ip6"
 		}
-		CfLimit.Remove(front)
-	}
-	if CfLimit.Len() >= 1200 {
-		time.Sleep(1 * time.Second)
-		goto WAIT_1S
-	}
 
-	api, err := cloudflare.NewWithAPIToken(cloudflareAccount.Key)
-	if err != nil {
-		log.Printf("cloudflare.New err:%+v", err)
-		return
+		resp, err := api.CreateAccountAccessRule(context.Background(), cloudflareAccount.Account, cloudflare.AccessRule{
+			Mode:  "block",
+			Notes: "batch request ip",
+			Configuration: cloudflare.AccessRuleConfiguration{
+				Target: target,
+				Value:  ip,
+			},
+			Scope: cloudflare.AccessRuleScope{
+				Type: "account",
+			},
+		})
+
+		if err != nil {
+			log.Printf("api.CreateZoneAccessRule err:%+v", err)
+			return
+		}
+		if !resp.Success {
+			log.Printf("api.CreateZoneAccessRule resp:%+v", resp)
+		}
+		log.Println("success post to cloudflare, ip:", ip)
+		limit.Limits.Prune(ip)
+
 	}
-	target := "ip"
-	if strings.Index(ip, ":") > 0 {
-		target = "ip6"
-	}
-	resp, err := api.CreateZoneAccessRule(context.Background(), cloudflareAccount.ZoneID, cloudflare.AccessRule{
-		Mode:  "block",
-		Notes: "batch request ip",
-		Configuration: cloudflare.AccessRuleConfiguration{
-			Target: target,
-			Value:  ip,
-		},
-		Scope: cloudflare.AccessRuleScope{
-			Type: "account",
-		},
-	})
-	CfLimit.PushBack(time.Now())
-	if err != nil {
-		log.Printf("api.CreateZoneAccessRule err:%+v", err)
-		return
-	}
-	if !resp.Success {
-		log.Printf("api.CreateZoneAccessRule resp:%+v", resp)
-	}
-	log.Println("success post to cloudflare, ip:", ip)
-	limit.Limits.Prune(ip)
+}
+
+func BlockIP(ip string) {
+	channels <- ip
 }

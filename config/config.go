@@ -11,11 +11,12 @@ type Config struct {
 	Nginx         string              `json:"nginx"`
 	DomainsHelper []string            `json:"domains"` // 域名列表
 	Domains       map[string]struct{} `json:"-"`       // 域名列表, 用于快速查找
-	Cloudflare    struct {
-		Email  string `json:"email"`
-		Key    string `json:"key"`
-		ZoneID string `json:"zone"`
-	} `json:"cloudflare"`
+	Cloudflare    Cloudflare          `json:"cloudflare"`
+}
+type Cloudflare struct {
+	Email   string `json:"email"`
+	Key     string `json:"key"`
+	Account string `json:"account"`
 }
 
 var GlobalConfig = Config{}
