@@ -134,7 +134,7 @@ func doBlockIP() {
 
 		target := "ip"
 		if strings.Index(ip, ":") > 0 {
-			target = "ip6"
+			target = "ip_range"
 			_, cidr64, _ := net.ParseCIDR(ip + "/64")
 			ip = cidr64.String()
 		}
