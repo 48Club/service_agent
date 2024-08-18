@@ -12,7 +12,7 @@ func TestLimit(t *testing.T) {
 	rl := NewIPBasedRateLimiter(limit, window, "")
 	allowedCount, deniedCount := 0, 0
 	for i := 0; i < 1000000; i++ {
-		if rl.Allow("8.8.8.8", false).Allow {
+		if rl.Allow("8.8.8.8", false, 1).Allow {
 			allowedCount++
 		} else {
 			deniedCount++

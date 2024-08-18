@@ -106,7 +106,7 @@ func LimitMiddleware(c *gin.Context) {
 	}
 
 	ip := c.ClientIP()
-	jsonLimit, jsonRemaining, tooManyRequests := LimitMiddleware2(ip)
+	jsonLimit, jsonRemaining, tooManyRequests := LimitMiddleware2(ip, true, 1)
 
 	c.Header("X-RateLimit-Remaining", jsonRemaining)
 	c.Header("X-RateLimit-Limit", jsonLimit)
@@ -119,11 +119,11 @@ func LimitMiddleware(c *gin.Context) {
 	limit.Limits.AllowPassCheck(ip)
 }
 
-func LimitMiddleware2(ip string) (string, string, bool) {
+func LimitMiddleware2(ip string, pass bool, count int) (string, string, bool) {
 	strLimit, strRemaining, tooManyRequests := []string{}, []string{}, false
 
 	for _, limit := range limit.Limits {
-		limiter := limit.Allow(ip, true)
+		limiter := limit.Allow(ip, pass, count)
 		strLimit = append(strLimit, fmt.Sprintf("%d/%s", limiter.Limit, limiter.Wind))
 		strRemaining = append(strRemaining, fmt.Sprintf("%d/%s", limiter.Limit-limiter.Used, limiter.Wind))
 		if !limiter.Allow {
@@ -183,13 +183,22 @@ func postHandler(c *gin.Context, body []byte) {
 	proxyHandler(c, body, config.GlobalConfig.Nginx)
 }
 
-func ethGasPriceHandler(c *gin.Context, i interface{}) {
-	c.JSON(http.StatusOK, tools.GetGasPrice(i))
+func ethStaticHandler(c *gin.Context, i, resp interface{}, f func(interface{}, interface{}) interface{}) {
+	c.JSON(http.StatusOK, f(i, resp))
 }
 
 // rpcHandler 处理 geth JSON-RPC 请求
 func rpcHandler(c *gin.Context, body []byte) {
-	web3Reqi, hasGasPrice, mustSend2Sentry, err := tools.DecodeRequestBody(c.GetBool("isRpc"), body)
+	reqCount, web3Reqi, mustSend2Sentry, buildRespByAgent, resp, err := tools.DecodeRequestBody(c.GetBool("isRpc"), body)
+	if reqCount > 1 {
+		_, _, tooManyRequests := LimitMiddleware2(c.ClientIP(), false, 2*reqCount-1)
+		if tooManyRequests {
+			go tools.BlockIP(c.ClientIP())
+			c.AbortWithStatus(http.StatusTooManyRequests)
+			return
+		}
+	}
+
 	if err != nil {
 		c.AbortWithStatus(http.StatusBadRequest)
 		return
@@ -197,8 +206,8 @@ func rpcHandler(c *gin.Context, body []byte) {
 
 	if mustSend2Sentry {
 		proxyHandler(c, body, config.GlobalConfig.Sentry)
-	} else if hasGasPrice {
-		ethGasPriceHandler(c, web3Reqi)
+	} else if buildRespByAgent {
+		ethStaticHandler(c, web3Reqi, resp, tools.EthResp)
 	} else {
 		proxyHandler(c, body, config.GlobalConfig.Original)
 	}

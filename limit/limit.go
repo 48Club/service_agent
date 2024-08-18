@@ -15,6 +15,14 @@ var (
 	Limits IPBasedRateLimiters
 )
 
+func (iprls IPBasedRateLimiters) Prune(ip string) {
+	for _, rl := range iprls {
+		rl.mu.Lock()
+		delete(rl.limiters, ip)
+		rl.mu.Unlock()
+	}
+}
+
 func init() {
 	Limits = IPBasedRateLimiters{
 		NewIPBasedRateLimiter(80, time.Second*5, "5s"),     // 16qps
@@ -41,7 +49,7 @@ func NewSlidingWindowRateLimiter(limit int, window time.Duration, window2 string
 	}
 }
 
-func (rl *SlidingWindowRateLimiter) Allow(pass bool) IsAllow {
+func (rl *SlidingWindowRateLimiter) Allow(pass bool, count int) IsAllow {
 	rl.mu.Lock()
 	defer rl.mu.Unlock()
 
@@ -56,12 +64,15 @@ func (rl *SlidingWindowRateLimiter) Allow(pass bool) IsAllow {
 
 	used := rl.timestamps.Len()
 
-	if used < rl.limit {
+	if used+count < rl.limit {
 		if pass {
 			return IsAllow{true, used, rl.limit, rl.window2}
 		}
-		rl.timestamps.PushBack(now)
-		return IsAllow{true, used + 1, rl.limit, rl.window2}
+		// add request
+		for i := 0; i < count; i++ {
+			rl.timestamps.PushBack(now)
+		}
+		return IsAllow{true, used + count, rl.limit, rl.window2}
 	}
 
 	return IsAllow{false, used, rl.limit, rl.window2}
@@ -86,7 +97,10 @@ func NewIPBasedRateLimiter(limit int, window time.Duration, window2 string) *IPB
 	}
 }
 
-func (iprl *IPBasedRateLimiter) Allow(ip string, pass bool) IsAllow {
+// pass: true means only check, false means check and add request
+//
+// count: if pass is false, count is the number of requests to add
+func (iprl *IPBasedRateLimiter) Allow(ip string, pass bool, count int) IsAllow {
 	iprl.mu.Lock()
 	defer iprl.mu.Unlock()
 
@@ -96,7 +110,7 @@ func (iprl *IPBasedRateLimiter) Allow(ip string, pass bool) IsAllow {
 		iprl.limiters[ip] = limiter
 	}
 
-	return limiter.Allow(pass)
+	return limiter.Allow(pass, count)
 }
 
 func (iprl *IPBasedRateLimiter) allowPassCheck(ip string) {

@@ -1,12 +1,18 @@
 package tools
 
 import (
+	"container/list"
+	"context"
 	"encoding/json"
 	"errors"
-	"math/big"
+	"log"
+	"strings"
+	"time"
 
+	"github.com/48Club/service_agent/config"
+	"github.com/48Club/service_agent/limit"
 	"github.com/48Club/service_agent/types"
-	"github.com/ethereum/go-ethereum/common/hexutil"
+	"github.com/cloudflare/cloudflare-go"
 	"github.com/gin-gonic/gin"
 )
 
@@ -34,47 +40,120 @@ func checkMethodType(body []byte) byte {
 	return 0
 }
 
-func DecodeRequestBody(isRpc bool, body []byte) (i interface{}, hasGasPrice, mustSend2Sentry bool, err error) {
+var BadBatchRequest = errors.New("bad batch request")
+
+func DecodeRequestBody(isRpc bool, body []byte) (reqCount int, i interface{}, mustSend2Sentry bool, buildRespByAgent bool, resp interface{}, err error) {
 	switch checkMethodType(body) {
 	case 123: // {
 		var web3Req types.Web3ClientRequest
 		err = json.Unmarshal(body, &web3Req)
 		if err == nil {
-			return web3Req, isRpc && web3Req.Method == "eth_gasPrice", hasMethod(types.Web3ClientRequests{web3Req}), nil
+			resp, buildRespByAgent = methodWithResp[web3Req.Method]
+			return 1, web3Req, hasMethod(types.Web3ClientRequests{web3Req}), buildRespByAgent, resp, nil
 		}
 	case 91: // [
 		var web3Reqs types.Web3ClientRequests
 		err = json.Unmarshal(body, &web3Reqs)
 		if err == nil {
-			return web3Reqs, isRpc && len(web3Reqs) == 1 && web3Reqs[0].Method == "eth_gasPrice", hasMethod(web3Reqs), nil
+			if isRpc && len(web3Reqs) == 1 {
+				resp, buildRespByAgent = methodWithResp[web3Reqs[0].Method]
+			}
+			return len(web3Reqs), web3Reqs, hasMethod(web3Reqs), buildRespByAgent, resp, nil
 		}
 	default:
 		err = errors.New("invalid request")
 	}
 
-	return nil, false, false, err
+	return 1, nil, false, false, false, err
 }
 
-var (
-	gas1Gwei = hexutil.EncodeBig(big.NewInt(1e9))
-)
-
-func GetGasPrice(i interface{}) interface{} {
+func buildGethResponse(i interface{}, result interface{}) interface{} {
 	if _req, ok := i.(types.Web3ClientRequest); ok {
 		return gin.H{
 			"jsonrpc": _req.JsonRPC,
 			"id":      _req.Id,
-			"result":  gas1Gwei,
+			"result":  result,
 		}
 	} else if _reqs, ok := i.(types.Web3ClientRequests); ok {
 		return []gin.H{
 			{
 				"jsonrpc": _reqs[0].JsonRPC,
 				"id":      _reqs[0].Id,
-				"result":  gas1Gwei,
+				"result":  result,
 			},
 		}
 
 	}
 	return gin.H{}
+}
+
+var (
+	methodWithResp = map[string]interface{}{
+		"eth_gasPrice":       ethGasPrice,
+		"web3_clientVersion": web3ClientVersion,
+		"eth_chainId":        ethChainId,
+	}
+)
+
+const (
+	ethGasPrice       = "0x3b9aca00"
+	web3ClientVersion = "Geth/v1.4.11/linux-amd64/go1.22.4"
+	ethChainId        = "0x38"
+)
+
+func EthResp(i, resp interface{}) interface{} {
+	return buildGethResponse(i, resp)
+}
+
+var (
+	CfLimit           *list.List = list.New()
+	cloudflareAccount            = config.GlobalConfig.Cloudflare
+)
+
+func BlockIP(ip string) {
+
+WAIT_1S:
+	now := time.Now()
+	for CfLimit.Len() > 0 {
+		front := CfLimit.Front()
+		if now.Sub(front.Value.(time.Time)) < 5*time.Minute {
+			break
+		}
+		CfLimit.Remove(front)
+	}
+	if CfLimit.Len() >= 1200 {
+		time.Sleep(1 * time.Second)
+		goto WAIT_1S
+	}
+
+	api, err := cloudflare.NewWithAPIToken(cloudflareAccount.Key)
+	if err != nil {
+		log.Printf("cloudflare.New err:%+v", err)
+		return
+	}
+	target := "ip"
+	if strings.Index(ip, ":") > 0 {
+		target = "ip6"
+	}
+	resp, err := api.CreateZoneAccessRule(context.Background(), cloudflareAccount.ZoneID, cloudflare.AccessRule{
+		Mode:  "block",
+		Notes: "batch request ip",
+		Configuration: cloudflare.AccessRuleConfiguration{
+			Target: target,
+			Value:  ip,
+		},
+		Scope: cloudflare.AccessRuleScope{
+			Type: "account",
+		},
+	})
+	CfLimit.PushBack(time.Now())
+	if err != nil {
+		log.Printf("api.CreateZoneAccessRule err:%+v", err)
+		return
+	}
+	if !resp.Success {
+		log.Printf("api.CreateZoneAccessRule resp:%+v", resp)
+	}
+	log.Println("success post to cloudflare, ip:", ip)
+	limit.Limits.Prune(ip)
 }

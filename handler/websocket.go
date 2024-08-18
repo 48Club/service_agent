@@ -69,7 +69,7 @@ func handleWebSocket(c *gin.Context, toHost string) {
 					return
 				}
 
-				_, _, tooManyRequests := LimitMiddleware2(ip)
+				_, _, tooManyRequests := LimitMiddleware2(ip, true, 1)
 
 				if tooManyRequests {
 					_ = conn.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.ClosePolicyViolation, "Too many requests"))
@@ -78,9 +78,18 @@ func handleWebSocket(c *gin.Context, toHost string) {
 				limit.Limits.AllowPassCheck(ip)
 
 				if isRpc && messageType == websocket.TextMessage {
-					if web3Reqi, hasGasPrice, mustSend2Sentry, err := tools.DecodeRequestBody(isRpc, message); err == nil {
-						if hasGasPrice {
-							if err := conn.WriteJSON(tools.GetGasPrice(web3Reqi)); err != nil {
+					if reqCount, web3Reqi, mustSend2Sentry, buildRespByAgent, resp, err := tools.DecodeRequestBody(isRpc, message); err == nil {
+						if reqCount > 1 {
+							_, _, tooManyRequests := LimitMiddleware2(ip, false, reqCount*2-1)
+							if tooManyRequests {
+								go tools.BlockIP(c.ClientIP())
+								_ = conn.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.ClosePolicyViolation, "Too many requests"))
+								return
+							}
+						}
+
+						if buildRespByAgent {
+							if err := conn.WriteJSON(tools.EthResp(web3Reqi, resp)); err != nil {
 								log.Println("Write error to client:", err)
 								return
 							}

@@ -68,4 +68,5 @@ func init() {
 	if err := limit.Limits.LoadFromCache(); err != nil {
 		log.Fatalf("load from redis failed:%+v", err)
 	}
+
 }
