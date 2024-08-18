@@ -13,6 +13,7 @@ import (
 	"github.com/48Club/service_agent/limit"
 	"github.com/48Club/service_agent/types"
 	"github.com/cloudflare/cloudflare-go"
+	mapset "github.com/deckarep/golang-set/v2"
 	"github.com/gin-gonic/gin"
 )
 
@@ -109,6 +110,7 @@ var (
 	channels          chan string       = make(chan string, 1)
 	cloudflareAccount config.Cloudflare = config.GlobalConfig.Cloudflare
 	api               *cloudflare.API
+	banedIPs          mapset.Set[string] = mapset.NewSet[string]()
 )
 
 func init() {
@@ -131,6 +133,10 @@ func doBlockIP() {
 	for {
 		<-tc.C
 		ip := <-channels
+		if banedIPs.Contains(ip) {
+			continue // skip duplicate ip
+		}
+		banedIPs.Add(ip)
 
 		target := "ip"
 		if strings.Index(ip, ":") > 0 {
