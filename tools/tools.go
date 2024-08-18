@@ -136,6 +136,7 @@ func doBlockIP() {
 			target = "ip6"
 		}
 
+	BEGIN:
 		resp, err := api.CreateAccountAccessRule(context.Background(), cloudflareAccount.Account, cloudflare.AccessRule{
 			Mode:  "block",
 			Notes: "batch request ip",
@@ -150,10 +151,11 @@ func doBlockIP() {
 
 		if err != nil {
 			log.Printf("api.CreateZoneAccessRule err:%+v", err)
-			return
+			goto BEGIN
 		}
 		if !resp.Success {
 			log.Printf("api.CreateZoneAccessRule resp:%+v", resp)
+			goto BEGIN
 		}
 		log.Println("success post to cloudflare, ip:", ip)
 		limit.Limits.Prune(ip)
