@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"log"
+	"net"
 	"strings"
 	"time"
 
@@ -134,6 +135,8 @@ func doBlockIP() {
 		target := "ip"
 		if strings.Index(ip, ":") > 0 {
 			target = "ip6"
+			_, cidr64, _ := net.ParseCIDR(ip + "/64")
+			ip = cidr64.String()
 		}
 
 	BEGIN:
