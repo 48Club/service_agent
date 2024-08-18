@@ -151,6 +151,10 @@ func doBlockIP() {
 
 		if err != nil {
 			log.Printf("api.CreateZoneAccessRule err:%+v", err)
+			if strings.Contains(err.Error(), "\\\"code\\\": 10009") || strings.Contains(err.Error(), "firewallaccessrules.api.duplicate_of_existing") {
+				continue
+				// skip duplicate rule
+			}
 			goto BEGIN
 		}
 		if !resp.Success {
