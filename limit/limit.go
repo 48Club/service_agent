@@ -12,7 +12,8 @@ import (
 )
 
 var (
-	Limits IPBasedRateLimiters
+	Limits  IPBasedRateLimiters
+	redisDB = redis.New(0)
 )
 
 func (iprls IPBasedRateLimiters) Prune(ip string) {
@@ -172,7 +173,7 @@ func (iprls IPBasedRateLimiters) SaveCache() error {
 		if err != nil {
 			return err
 		}
-		if err := redis.Server.SaveCache(fmt.Sprintf("rl_%s", iprl.window2), string(b), iprl.window); err != nil {
+		if err := redisDB.SaveCache(fmt.Sprintf("rl_%s", iprl.window2), string(b), iprl.window); err != nil {
 			return err
 		}
 	}
@@ -182,7 +183,7 @@ func (iprls IPBasedRateLimiters) SaveCache() error {
 func (iprls IPBasedRateLimiters) LoadFromCache() error {
 	for _, iprl := range iprls {
 		key := fmt.Sprintf("rl_%s", iprl.window2)
-		b, err := redis.Server.GetCache(key)
+		b, err := redisDB.GetCache(key)
 		if err != nil {
 			if err == redis9.Nil {
 				continue
@@ -204,7 +205,7 @@ func (iprls IPBasedRateLimiters) LoadFromCache() error {
 			}
 			iprl.limiters[_redisSave.IP] = rl
 		}
-		_ = redis.Server.Del(key)
+		_ = redisDB.Del(key)
 	}
 	return nil
 }

@@ -186,6 +186,7 @@ func postHandler(c *gin.Context, body []byte) {
 func ethStaticHandler(c *gin.Context, i, resp interface{}, f func(interface{}, interface{}) interface{}) {
 	c.JSON(http.StatusOK, f(i, resp))
 }
+
 func addLimitBatchReq(ip string, reqCount int) (isClose bool) {
 	if reqCount > 80 {
 		go tools.BlockIP(ip)
