@@ -19,6 +19,10 @@ var (
 	banedIPs mapset.Set[string] = mapset.NewSet[string]()
 )
 
+func IsBanedIP(ip string) bool {
+	return banedIPs.Contains(ip)
+}
+
 func init() {
 	go doBlockIP()
 	go initBanedIPs()

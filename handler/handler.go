@@ -101,11 +101,16 @@ func SetMaxRequestBodySize(c *gin.Context) {
 
 // 限流中间件
 func LimitMiddleware(c *gin.Context) {
+	ip := c.ClientIP()
+	if tools.IsBanedIP(ip) {
+		c.AbortWithStatus(http.StatusUnauthorized)
+		return
+	}
+
 	if c.Request.Header.Get("Upgrade") == "websocket" && c.Request.Method == http.MethodGet {
 		return // websocket 不在此处限流
 	}
 
-	ip := c.ClientIP()
 	jsonLimit, jsonRemaining, tooManyRequests := LimitMiddleware2(ip, true, 1)
 
 	c.Header("X-RateLimit-Remaining", jsonRemaining)
