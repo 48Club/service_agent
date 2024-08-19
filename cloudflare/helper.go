@@ -2,9 +2,8 @@ package cloudflare
 
 import (
 	_ "embed"
+	"net"
 	"strings"
-
-	"github.com/gin-gonic/gin"
 )
 
 var (
@@ -13,17 +12,27 @@ var (
 	//go:embed ips-v6
 	_ipsV6 []byte
 
-	ips []string
+	_ips []*net.IPNet
 )
 
-func SetRemoteAddr(g *gin.Engine) {
-	g.TrustedPlatform = gin.PlatformCloudflare
-	if err := g.SetTrustedProxies(ips); err != nil {
-		panic(err)
+func init() {
+	ips := strings.Split(string(_ipsV4), "\n")
+	ips = append(ips, strings.Split(string(_ipsV6), "\n")...)
+	for _, v := range ips {
+		_, ipNet, err := net.ParseCIDR(v)
+		if err != nil {
+			continue
+		}
+		_ips = append(_ips, ipNet)
 	}
 }
 
-func init() {
-	ips = append(ips, strings.Split(string(_ipsV4), "\n")...)
-	ips = append(ips, strings.Split(string(_ipsV6), "\n")...)
+func IsCloudflareIP(ip string) bool {
+	ipAddr := net.ParseIP(ip)
+	for _, v := range _ips {
+		if v.Contains(ipAddr) {
+			return true
+		}
+	}
+	return false
 }

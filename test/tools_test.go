@@ -2,18 +2,21 @@ package test
 
 import (
 	"math/big"
-	"net"
 	"testing"
 
+	mapset "github.com/deckarep/golang-set/v2"
 	"github.com/ethereum/go-ethereum/common/hexutil"
+	"github.com/stretchr/testify/assert"
 )
 
 func TestHexFormat(t *testing.T) {
-
 	t.Log(hexutil.EncodeBig(big.NewInt(1e9)))
 }
 
-func TestIPv6Formart(t *testing.T) {
-	_, cidr64, _ := net.ParseCIDR("2a00:1390:5:1033:ddf5:ef26:45f5:f7cc/64")
-	t.Log(cidr64.String())
+func TestMapSetTest(t *testing.T) {
+	m := mapset.NewSet[string]()
+	m.Append([]string{}...)
+	assert.Equal(t, 0, m.Cardinality())
+	m.Append("1", "2", "3")
+	assert.Equal(t, 3, m.Cardinality())
 }

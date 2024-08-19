@@ -9,7 +9,6 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/48Club/service_agent/cloudflare"
 	"github.com/48Club/service_agent/handler"
 	"github.com/48Club/service_agent/limit"
 	"github.com/gin-contrib/cors"
@@ -19,8 +18,7 @@ import (
 func main() {
 	r := gin.New()
 	r.Use(handler.CustomLoggerMiddleware, gin.Recovery())
-
-	cloudflare.SetRemoteAddr(r)
+	r.TrustedPlatform = gin.PlatformCloudflare
 
 	r.Use(cors.New(
 		cors.Config{

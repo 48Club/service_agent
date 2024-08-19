@@ -37,6 +37,9 @@ func CustomLoggerMiddleware(c *gin.Context) {
 		if c.Request.Header.Get("Upgrade") == "websocket" && statusCode == http.StatusBadRequest {
 			return // websocket 请求不记录 400 错误
 		}
+		if tools.IsBanedIP(c.GetString("ip")) {
+			return // 被封禁的 IP 不记录
+		}
 		gin.LoggerWithConfig(gin.LoggerConfig{Formatter: func(param gin.LogFormatterParams) string {
 			var statusColor, methodColor, resetColor string
 			if param.IsOutputColor() {
@@ -66,7 +69,7 @@ func CustomLoggerMiddleware(c *gin.Context) {
 func CustomRecoveryMiddleware(c *gin.Context) {
 	defer func() {
 		if r := recover(); r != nil {
-			log.Printf("Recovered from panic: %v, req len: %d, resp len: %d, from: %s, resp code: %d", r, c.Request.ContentLength, c.Writer.Size(), c.ClientIP(), c.Writer.Status())
+			log.Printf("Recovered from panic: %v, req len: %d, resp len: %d, from: %s, resp code: %d", r, c.Request.ContentLength, c.Writer.Size(), c.GetString("ip"), c.Writer.Status())
 		}
 	}()
 	c.Next() // 继续处理其他 middleware 与 handler, 最后执行 defer
@@ -101,9 +104,11 @@ func SetMaxRequestBodySize(c *gin.Context) {
 
 // 限流中间件
 func LimitMiddleware(c *gin.Context) {
-	ip := c.ClientIP()
-	if tools.IsBanedIP(ip) {
-		c.AbortWithStatus(http.StatusUnauthorized)
+	userIP, remoteIP := tools.FormatIP(c)
+	c.Set("ip", userIP)
+
+	if userIP == "" || tools.IsBanedIP(userIP) || tools.IsBanedIP(remoteIP) {
+		c.AbortWithStatus(http.StatusBadGateway) // 假装服务器挂了
 		return
 	}
 
@@ -111,7 +116,7 @@ func LimitMiddleware(c *gin.Context) {
 		return // websocket 不在此处限流
 	}
 
-	jsonLimit, jsonRemaining, tooManyRequests := LimitMiddleware2(ip, true, 1)
+	jsonLimit, jsonRemaining, tooManyRequests := LimitMiddleware2(userIP, true, 1)
 
 	c.Header("X-RateLimit-Remaining", jsonRemaining)
 	c.Header("X-RateLimit-Limit", jsonLimit)
@@ -121,7 +126,7 @@ func LimitMiddleware(c *gin.Context) {
 		return
 	}
 
-	limit.Limits.AllowPassCheck(ip)
+	limit.Limits.AllowPassCheck(userIP)
 }
 
 func LimitMiddleware2(ip string, pass bool, count int) (string, string, bool) {
@@ -192,24 +197,23 @@ func ethStaticHandler(c *gin.Context, i, resp interface{}, f func(interface{}, i
 	c.JSON(http.StatusOK, f(i, resp))
 }
 
-func addLimitBatchReq(ip string, reqCount int) (isClose bool) {
-	if reqCount > 80 {
-		go tools.BlockIP(ip)
-	} else if reqCount > 1 {
-		_, _, tooManyRequests := LimitMiddleware2(ip, false, reqCount-1)
-		if !tooManyRequests {
-			return
-		}
-	} else if reqCount == 1 {
-		return
+func addLimitBatchReq(ip string, reqCount int) bool {
+	if reqCount == 1 {
+		return false
 	}
-	return true
+	reqCount = 2*reqCount - 1 // batch call 一次扣掉两个配额
+	if reqCount > config.GlobalConfig.MaxBatchQuery {
+		go tools.BlockIP(ip)
+		return true
+	}
+	_, _, tooManyRequests := LimitMiddleware2(ip, false, reqCount)
+	return tooManyRequests
 }
 
 // rpcHandler 处理 geth JSON-RPC 请求
 func rpcHandler(c *gin.Context, body []byte) {
 	reqCount, web3Reqi, mustSend2Sentry, buildRespByAgent, resp, err := tools.DecodeRequestBody(c.GetBool("isRpc"), body)
-	if addLimitBatchReq(c.ClientIP(), reqCount) {
+	if addLimitBatchReq(c.GetString("ip"), reqCount) {
 		c.AbortWithStatus(http.StatusTooManyRequests)
 		return
 	}

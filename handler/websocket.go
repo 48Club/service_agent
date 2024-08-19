@@ -56,7 +56,7 @@ func handleWebSocket(c *gin.Context, toHost string) {
 	}
 
 	go func() {
-		isRpc, ip := c.GetBool("isRpc"), c.ClientIP()
+		isRpc, ip := c.GetBool("isRpc"), c.GetString("ip")
 		defer cancelConn(proxyConn)
 		for {
 			select {
