@@ -186,17 +186,26 @@ func postHandler(c *gin.Context, body []byte) {
 func ethStaticHandler(c *gin.Context, i, resp interface{}, f func(interface{}, interface{}) interface{}) {
 	c.JSON(http.StatusOK, f(i, resp))
 }
+func addLimitBatchReq(ip string, reqCount int) (isClose bool) {
+	if reqCount > 80 {
+		go tools.BlockIP(ip)
+	} else if reqCount > 1 {
+		_, _, tooManyRequests := LimitMiddleware2(ip, false, reqCount-1)
+		if !tooManyRequests {
+			return
+		}
+	} else if reqCount == 1 {
+		return
+	}
+	return true
+}
 
 // rpcHandler 处理 geth JSON-RPC 请求
 func rpcHandler(c *gin.Context, body []byte) {
 	reqCount, web3Reqi, mustSend2Sentry, buildRespByAgent, resp, err := tools.DecodeRequestBody(c.GetBool("isRpc"), body)
-	if reqCount > 1 {
-		_, _, tooManyRequests := LimitMiddleware2(c.ClientIP(), false, 2*reqCount-1)
-		if tooManyRequests {
-			go tools.BlockIP(c.ClientIP())
-			c.AbortWithStatus(http.StatusTooManyRequests)
-			return
-		}
+	if addLimitBatchReq(c.ClientIP(), reqCount) {
+		c.AbortWithStatus(http.StatusTooManyRequests)
+		return
 	}
 
 	if err != nil {

@@ -79,13 +79,9 @@ func handleWebSocket(c *gin.Context, toHost string) {
 
 				if isRpc && messageType == websocket.TextMessage {
 					if reqCount, web3Reqi, mustSend2Sentry, buildRespByAgent, resp, err := tools.DecodeRequestBody(isRpc, message); err == nil {
-						if reqCount > 1 {
-							_, _, tooManyRequests := LimitMiddleware2(ip, false, reqCount*2-1)
-							if tooManyRequests {
-								go tools.BlockIP(c.ClientIP())
-								_ = conn.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.ClosePolicyViolation, "Too many requests"))
-								return
-							}
+						if addLimitBatchReq(ip, reqCount) {
+							_ = conn.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.ClosePolicyViolation, "Too many requests"))
+							return
 						}
 
 						if buildRespByAgent {
