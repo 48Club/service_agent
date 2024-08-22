@@ -23,7 +23,7 @@ func hasMethod(t types.Web3ClientRequests) bool {
 	return false
 }
 
-func checkMethodType(body []byte) byte {
+func CheckJOSNType(body []byte) byte {
 	for _, v := range body {
 		if v != 32 {
 			return v
@@ -35,7 +35,7 @@ func checkMethodType(body []byte) byte {
 var BadBatchRequest = errors.New("bad batch request")
 
 func DecodeRequestBody(isRpc bool, body []byte) (reqCount int, i interface{}, mustSend2Sentry bool, buildRespByAgent bool, resp interface{}, err error) {
-	switch checkMethodType(body) {
+	switch CheckJOSNType(body) {
 	case 123: // {
 		var web3Req types.Web3ClientRequest
 		err = json.Unmarshal(body, &web3Req)

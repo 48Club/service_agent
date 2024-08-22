@@ -25,15 +25,14 @@ func handleWebSocket(c *gin.Context, toHost string) {
 	ctx, cancelCtx := context.WithCancel(c.Request.Context())
 	defer cancelCtx()
 
-	// 将请求升级为 WebSocket 连接
 	conn, err := upgrader.Upgrade(c.Writer, c.Request.Clone(ctx), nil)
 	if err != nil {
 		log.Println("Failed to upgrade connection:", err)
+		c.AbortWithStatus(http.StatusBadRequest)
 		return
 	}
 	defer conn.Close()
 
-	// 连接到目标 WebSocket 服务器
 	proxyConn, _, err := websocket.DefaultDialer.DialContext(ctx, toHost, http.Header{
 		"Origin": {c.Request.Header.Get("Origin")},
 		"Host":   {c.Request.Host},
@@ -45,7 +44,6 @@ func handleWebSocket(c *gin.Context, toHost string) {
 	}
 	defer proxyConn.Close()
 
-	// 使用 sync.WaitGroup 确保所有 goroutine 正确完成
 	var wg sync.WaitGroup
 	wg.Add(2)
 
@@ -134,6 +132,5 @@ func handleWebSocket(c *gin.Context, toHost string) {
 		}
 	}()
 
-	// 等待所有 goroutine 结束
 	wg.Wait()
 }

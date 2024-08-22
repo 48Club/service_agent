@@ -19,14 +19,9 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-var normalRequestStatus mapset.Set[int]
-
-func init() {
-	normalRequestStatus = mapset.NewSet[int]()
-	normalRequestStatus.Add(http.StatusOK)
-	normalRequestStatus.Add(http.StatusTooManyRequests)
-	normalRequestStatus.Add(http.StatusNoContent)
-}
+var (
+	normalRequestStatus = mapset.NewSet[int](http.StatusOK, http.StatusNoContent, http.StatusTooManyRequests, http.StatusUnprocessableEntity)
+)
 
 func CustomLoggerMiddleware(c *gin.Context) {
 	defer func() {
@@ -34,12 +29,11 @@ func CustomLoggerMiddleware(c *gin.Context) {
 		if normalRequestStatus.ContainsOne(statusCode) {
 			return
 		}
-		if c.Request.Header.Get("Upgrade") == "websocket" && statusCode == http.StatusBadRequest {
-			return // websocket 请求不记录 400 错误
+
+		if c.IsWebsocket() && statusCode == http.StatusBadRequest {
+			return
 		}
-		if tools.IsBanedIP(c.GetString("ip")) {
-			return // 被封禁的 IP 不记录
-		}
+
 		gin.LoggerWithConfig(gin.LoggerConfig{Formatter: func(param gin.LogFormatterParams) string {
 			var statusColor, methodColor, resetColor string
 			if param.IsOutputColor() {
@@ -72,7 +66,7 @@ func CustomRecoveryMiddleware(c *gin.Context) {
 			log.Printf("Recovered from panic: %v, req len: %d, resp len: %d, from: %s, resp code: %d", r, c.Request.ContentLength, c.Writer.Size(), c.GetString("ip"), c.Writer.Status())
 		}
 	}()
-	c.Next() // 继续处理其他 middleware 与 handler, 最后执行 defer
+	c.Next()
 }
 
 const (
@@ -102,18 +96,17 @@ func SetMaxRequestBodySize(c *gin.Context) {
 	c.Request.Body = io.NopCloser(bytes.NewReader(body))
 }
 
-// 限流中间件
 func LimitMiddleware(c *gin.Context) {
-	userIP, remoteIP := tools.FormatIP(c)
+	userIP := tools.CheckGinIP(c)
 	c.Set("ip", userIP)
 
-	if userIP == "" || tools.IsBanedIP(userIP) || tools.IsBanedIP(remoteIP) {
-		c.AbortWithStatus(http.StatusBadGateway) // 假装服务器挂了
+	if userIP == "" {
+		c.AbortWithStatus(http.StatusUnprocessableEntity)
 		return
 	}
 
-	if c.Request.Header.Get("Upgrade") == "websocket" && c.Request.Method == http.MethodGet {
-		return // websocket 不在此处限流
+	if c.IsWebsocket() && c.Request.Method == http.MethodGet {
+		return
 	}
 
 	jsonLimit, jsonRemaining, tooManyRequests := LimitMiddleware2(userIP, true, 1)
@@ -170,7 +163,8 @@ func AnyHandler(c *gin.Context) {
 		}
 		postHandler(c, body)
 	case http.MethodGet:
-		if c.Request.URL.Path == "/ws/" && c.Request.Header.Get("Upgrade") == "websocket" {
+
+		if c.Request.URL.Path == "/ws/" && c.IsWebsocket() {
 			if c.GetBool("isRpc") {
 				handleWebSocket(c, fmt.Sprintf("ws://%s", strings.Split(config.GlobalConfig.Original, "://")[1]))
 				return
@@ -182,14 +176,12 @@ func AnyHandler(c *gin.Context) {
 	}
 }
 
-// postHandler 处理 POST 请求
 func postHandler(c *gin.Context, body []byte) {
 	if c.GetBool("isRpc") {
 		rpcHandler(c, body)
 		return
 	}
 
-	// 不在域名列表, 直接交给 nginx 处理
 	proxyHandler(c, body, config.GlobalConfig.Nginx)
 }
 
@@ -201,7 +193,7 @@ func addLimitBatchReq(ip string, reqCount int) bool {
 	if reqCount == 1 {
 		return false
 	}
-	reqCount = 2*reqCount - 1 // batch call 一次扣掉两个配额
+	reqCount = 2*reqCount - 1
 	if reqCount > config.GlobalConfig.MaxBatchQuery {
 		go tools.BlockIP(ip)
 		return true
@@ -210,7 +202,6 @@ func addLimitBatchReq(ip string, reqCount int) bool {
 	return tooManyRequests
 }
 
-// rpcHandler 处理 geth JSON-RPC 请求
 func rpcHandler(c *gin.Context, body []byte) {
 	reqCount, web3Reqi, mustSend2Sentry, buildRespByAgent, resp, err := tools.DecodeRequestBody(c.GetBool("isRpc"), body)
 	if addLimitBatchReq(c.GetString("ip"), reqCount) {
@@ -230,12 +221,10 @@ func rpcHandler(c *gin.Context, body []byte) {
 	} else {
 		proxyHandler(c, body, config.GlobalConfig.Original)
 	}
-
 }
 
-// proxyHandler 代理请求到目标节点
 func proxyHandler(c *gin.Context, body []byte, toHost string) {
-	if c.Request.Header.Get("Upgrade") == "websocket" {
+	if c.IsWebsocket() {
 		c.AbortWithStatus(http.StatusBadRequest)
 		return
 	}

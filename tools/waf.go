@@ -22,7 +22,7 @@ var (
 	banedIPs mapset.Set[string] = mapset.NewSet[string]()
 )
 
-func formatIP(s string) string {
+func FormatIP(s string) string { // check ipv4, or format ipv6 to cidr64
 	if strings.Index(s, ":") > 0 {
 		_, cidr64, err := net.ParseCIDR(s + "/64") // format ipv6 to cidr64, if bad ip, return empty string and toBlockIP
 		if err != nil {
@@ -39,13 +39,18 @@ func formatIP(s string) string {
 	return s
 }
 
-func FormatIP(c *gin.Context) (string, string) {
-	remoteIP := formatIP(c.RemoteIP())
+func CheckGinIP(c *gin.Context) string {
+	remoteIP, userIp := FormatIP(c.RemoteIP()), FormatIP(c.ClientIP())
+	if IsBanedIP(remoteIP) || IsBanedIP(userIp) {
+		return ""
+	}
+
 	if !cloudflare.IsCloudflareIP(remoteIP) {
 		go BlockIP(remoteIP)
-		return "", "" // not cloudflare ip
+		return ""
 	}
-	return formatIP(c.ClientIP()), remoteIP
+
+	return userIp
 }
 
 func IsBanedIP(ip string) bool {
