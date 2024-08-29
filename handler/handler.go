@@ -2,7 +2,6 @@ package handler
 
 import (
 	"bytes"
-	"encoding/json"
 	"fmt"
 	"io"
 	"log"
@@ -15,6 +14,7 @@ import (
 	"github.com/48Club/service_agent/config"
 	"github.com/48Club/service_agent/limit"
 	"github.com/48Club/service_agent/tools"
+	"github.com/48Club/service_agent/types"
 	mapset "github.com/deckarep/golang-set/v2"
 	"github.com/gin-gonic/gin"
 )
@@ -109,11 +109,14 @@ func LimitMiddleware(c *gin.Context) {
 		return
 	}
 
-	jsonLimit, jsonRemaining, tooManyRequests := LimitMiddleware2(userIP, true, 1)
+	var limitHeader = types.LimitResponse{}
+	tooManyRequests := LimitMiddleware2(userIP, true, 1, &limitHeader)
 
-	c.Header("X-RateLimit-Remaining", jsonRemaining)
-	c.Header("X-RateLimit-Limit", jsonLimit)
+	c.Header("X-RateLimit-Remaining", limitHeader.Remaining.ToString())
+	c.Header("X-RateLimit-Limit", limitHeader.Limit.ToString())
 	c.Header("X-Powered-By", "https://x.com/48club_official")
+	c.Request.Header.Set("X-Forwarded-For", userIP)
+
 	if tooManyRequests {
 		c.AbortWithStatus(http.StatusTooManyRequests)
 		return
@@ -122,21 +125,21 @@ func LimitMiddleware(c *gin.Context) {
 	limit.Limits.AllowPassCheck(userIP)
 }
 
-func LimitMiddleware2(ip string, pass bool, count int) (string, string, bool) {
-	strLimit, strRemaining, tooManyRequests := []string{}, []string{}, false
+func LimitMiddleware2(ip string, pass bool, count int, res *types.LimitResponse) bool {
+	tooManyRequests := false
 
 	for _, limit := range limit.Limits {
 		limiter := limit.Allow(ip, pass, count)
-		strLimit = append(strLimit, fmt.Sprintf("%d/%s", limiter.Limit, limiter.Wind))
-		strRemaining = append(strRemaining, fmt.Sprintf("%d/%s", limiter.Limit-limiter.Used, limiter.Wind))
+		if res != nil {
+			res.Limit = append(res.Limit, fmt.Sprintf("%d/%s", limiter.Limit, limiter.Wind))
+			res.Remaining = append(res.Remaining, fmt.Sprintf("%d/%s", limiter.Limit-limiter.Used, limiter.Wind))
+		}
 		if !limiter.Allow {
 			tooManyRequests = true
 		}
 	}
 
-	bRemaining, _ := json.Marshal(strRemaining)
-	bLimit, _ := json.Marshal(strLimit)
-	return string(bLimit), string(bRemaining), tooManyRequests
+	return tooManyRequests
 }
 
 func AnyHandler(c *gin.Context) {
@@ -198,7 +201,7 @@ func addLimitBatchReq(ip string, reqCount int) bool {
 		go tools.BlockIP(ip)
 		return true
 	}
-	_, _, tooManyRequests := LimitMiddleware2(ip, false, reqCount)
+	tooManyRequests := LimitMiddleware2(ip, false, reqCount, nil)
 	return tooManyRequests
 }
 
@@ -230,30 +233,44 @@ func proxyHandler(c *gin.Context, body []byte, toHost string) {
 	}
 
 	target, _ := url.Parse(toHost)
-	proxy := httputil.NewSingleHostReverseProxy(target)
-	proxy.Director = func(req *http.Request) {
-		req.URL = target
-		req.Host = c.Request.Host
-		req.URL.Path = c.Request.URL.Path
-		req.URL.RawQuery = c.Request.URL.RawQuery
-		req.Header = c.Request.Header.Clone()
-		req.ContentLength = int64(len(body))
-		req.Body = io.NopCloser(bytes.NewReader(body))
-	}
+	proxy := &httputil.ReverseProxy{
+		Rewrite: func(r *httputil.ProxyRequest) {
+			req := r.Out
+			req.URL = target
+			req.Host = c.Request.Host
+			req.URL.Path = c.Request.URL.Path
+			req.URL.RawQuery = c.Request.URL.RawQuery
 
-	proxy.ErrorHandler = func(w http.ResponseWriter, r *http.Request, err error) {
-		c.AbortWithStatus(http.StatusBadGateway)
-	}
+			req.Header = http.Header{}
+			for k, v := range r.In.Header {
+				if strings.HasPrefix(strings.ToLower(k), "cf-") {
+					continue
+				}
+				req.Header[k] = v
+			}
 
-	proxy.ModifyResponse = func(resp *http.Response) error {
-		resp.Body = http.MaxBytesReader(nil, resp.Body, MaxResponseBodySize)
+			if target.Scheme == "https" {
+				req.Header.Set("X-Forwarded-Proto", "https")
+			} else {
+				req.Header.Set("X-Forwarded-Proto", "http")
+			}
 
-		resp.Header.Del("Access-Control-Allow-Origin")
+			req.ContentLength = int64(len(body))
+			req.Body = io.NopCloser(bytes.NewReader(body))
+		},
+		ModifyResponse: func(resp *http.Response) error {
+			resp.Body = http.MaxBytesReader(nil, resp.Body, MaxResponseBodySize)
 
-		if resp.ContentLength <= 0 {
-			resp.Header.Del("Content-Length")
-		}
-		return nil
+			resp.Header.Del("Access-Control-Allow-Origin")
+
+			if resp.ContentLength <= 0 {
+				resp.Header.Del("Content-Length")
+			}
+			return nil
+		},
+		ErrorHandler: func(w http.ResponseWriter, r *http.Request, err error) {
+			c.AbortWithStatus(http.StatusBadGateway)
+		},
 	}
 
 	proxy.ServeHTTP(c.Writer, c.Request)

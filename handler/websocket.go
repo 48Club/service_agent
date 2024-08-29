@@ -53,8 +53,9 @@ func handleWebSocket(c *gin.Context, toHost string) {
 		wg.Done()
 	}
 
+	isRpc, ip := c.GetBool("isRpc"), c.GetString("ip")
+
 	go func() {
-		isRpc, ip := c.GetBool("isRpc"), c.GetString("ip")
 		defer cancelConn(proxyConn)
 		for {
 			select {
@@ -67,9 +68,7 @@ func handleWebSocket(c *gin.Context, toHost string) {
 					return
 				}
 
-				_, _, tooManyRequests := LimitMiddleware2(ip, true, 1)
-
-				if tooManyRequests {
+				if LimitMiddleware2(ip, true, 1, nil) {
 					_ = conn.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.ClosePolicyViolation, "Too many requests"))
 					return
 				}
