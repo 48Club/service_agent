@@ -234,6 +234,7 @@ func proxyHandler(c *gin.Context, body []byte, toHost string) {
 
 	target, _ := url.Parse(toHost)
 	proxy := &httputil.ReverseProxy{
+		Transport: httpTransport,
 		Rewrite: func(r *httputil.ProxyRequest) {
 			req := r.Out
 			req.URL = target
@@ -260,9 +261,7 @@ func proxyHandler(c *gin.Context, body []byte, toHost string) {
 		},
 		ModifyResponse: func(resp *http.Response) error {
 			resp.Body = http.MaxBytesReader(nil, resp.Body, MaxResponseBodySize)
-
 			resp.Header.Del("Access-Control-Allow-Origin")
-
 			if resp.ContentLength <= 0 {
 				resp.Header.Del("Content-Length")
 			}
@@ -274,4 +273,13 @@ func proxyHandler(c *gin.Context, body []byte, toHost string) {
 	}
 
 	proxy.ServeHTTP(c.Writer, c.Request)
+}
+
+var (
+	httpTransport = http.DefaultTransport.(*http.Transport)
+)
+
+func init() {
+	httpTransport.DisableCompression = true
+	httpTransport.DisableKeepAlives = false
 }
