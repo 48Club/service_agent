@@ -11,6 +11,7 @@ import (
 var toSentryMethod = map[string]struct{}{
 	"eth_sendRawTransaction":      {},
 	"eth_sendBatchRawTransaction": {},
+	"eth_get0GweiGasRemaining":    {},
 }
 
 func hasMethod(t types.Web3ClientRequests) bool {

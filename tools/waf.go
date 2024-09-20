@@ -39,18 +39,18 @@ func FormatIP(s string) string { // check ipv4, or format ipv6 to cidr64
 	return s
 }
 
-func CheckGinIP(c *gin.Context) string {
+func CheckGinIP(c *gin.Context) (_ string, fromCDN bool, isBaned bool) {
 	remoteIP, userIp := FormatIP(c.RemoteIP()), FormatIP(c.ClientIP())
-	if IsBanedIP(remoteIP) || IsBanedIP(userIp) {
-		return ""
-	}
 
-	if !cloudflare.IsCloudflareIP(remoteIP) {
+	if fromCDN = cloudflare.IsCloudflareIP(remoteIP); !fromCDN {
 		go BlockIP(remoteIP)
-		return ""
 	}
 
-	return userIp
+	if IsBanedIP(remoteIP) || IsBanedIP(userIp) {
+		isBaned = true
+	}
+
+	return userIp, fromCDN, isBaned
 }
 
 func IsBanedIP(ip string) bool {

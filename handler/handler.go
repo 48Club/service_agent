@@ -97,11 +97,11 @@ func SetMaxRequestBodySize(c *gin.Context) {
 }
 
 func LimitMiddleware(c *gin.Context) {
-	userIP := tools.CheckGinIP(c)
+	userIP, fromCDN, _ := tools.CheckGinIP(c)
 	c.Set("ip", userIP)
 
-	if userIP == "" {
-		c.AbortWithStatus(http.StatusUnprocessableEntity)
+	if !fromCDN {
+		c.AbortWithStatus(http.StatusForbidden)
 		return
 	}
 
