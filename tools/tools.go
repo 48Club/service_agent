@@ -8,22 +8,6 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-var toSentryMethod = map[string]struct{}{
-	"eth_sendRawTransaction":      {},
-	"eth_sendBatchRawTransaction": {},
-	"eth_get0GweiGasRemaining":    {},
-}
-
-func hasMethod(t types.Web3ClientRequests) bool {
-	for _, v := range t {
-		_, ok := toSentryMethod[v.Method]
-		if ok {
-			return true
-		}
-	}
-	return false
-}
-
 func CheckJOSNType(body []byte) byte {
 	for _, v := range body {
 		if v != 32 {
@@ -35,14 +19,14 @@ func CheckJOSNType(body []byte) byte {
 
 var BadBatchRequest = errors.New("bad batch request")
 
-func DecodeRequestBody(isRpc bool, body []byte) (reqCount int, i interface{}, mustSend2Sentry bool, buildRespByAgent bool, resp interface{}, err error) {
+func DecodeRequestBody(isRpc bool, body []byte) (reqCount int, i interface{}, mustSend2Sentry bool, sumGas uint64, buildRespByAgent bool, resp interface{}, err error) {
 	switch CheckJOSNType(body) {
 	case 123: // {
 		var web3Req types.Web3ClientRequest
 		err = json.Unmarshal(body, &web3Req)
 		if err == nil {
 			resp, buildRespByAgent = methodWithResp[web3Req.Method]
-			return 1, web3Req, hasMethod(types.Web3ClientRequests{web3Req}), buildRespByAgent, resp, nil
+			return 1, web3Req, web3Req.HasSentryMethod(), web3Req.CheckCallGas(), buildRespByAgent, resp, nil
 		}
 	case 91: // [
 		var web3Reqs types.Web3ClientRequests
@@ -51,13 +35,13 @@ func DecodeRequestBody(isRpc bool, body []byte) (reqCount int, i interface{}, mu
 			if isRpc && len(web3Reqs) == 1 {
 				resp, buildRespByAgent = methodWithResp[web3Reqs[0].Method]
 			}
-			return len(web3Reqs), web3Reqs, hasMethod(web3Reqs), buildRespByAgent, resp, nil
+			return len(web3Reqs), web3Reqs, web3Reqs.HasSentryMethod(), web3Reqs.CheckCallGas(), buildRespByAgent, resp, nil
 		}
 	default:
 		err = errors.New("invalid request")
 	}
 
-	return 1, nil, false, false, false, err
+	return 1, nil, false, 0, false, false, err
 }
 
 func buildGethResponse(i interface{}, result interface{}) interface{} {
