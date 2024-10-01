@@ -105,11 +105,6 @@ func LimitMiddleware(c *gin.Context) {
 		return
 	}
 
-	if userIP == "" {
-		c.AbortWithStatus(http.StatusUnprocessableEntity)
-		return
-	}
-
 	if c.IsWebsocket() && c.Request.Method == http.MethodGet {
 		return
 	}
@@ -211,15 +206,7 @@ func addLimitBatchReq(ip string, reqCount int) bool {
 }
 
 func rpcHandler(c *gin.Context, body []byte) {
-	reqCount, web3Reqi, mustSend2Sentry, sumGas, buildRespByAgent, resp, err := tools.DecodeRequestBody(c.GetBool("isRpc"), body)
-	if sumGas > config.GlobalConfig.MaxGas {
-		c.AbortWithStatus(http.StatusUnprocessableEntity)
-		if sumGas > config.GlobalConfig.GotBanGas {
-			go tools.BlockIP(c.GetString("ip"))
-		}
-		return
-	}
-
+	reqCount, web3Reqi, mustSend2Sentry, buildRespByAgent, resp, err := tools.DecodeRequestBody(c.GetBool("isRpc"), body)
 	if addLimitBatchReq(c.GetString("ip"), reqCount) {
 		c.AbortWithStatus(http.StatusTooManyRequests)
 		return

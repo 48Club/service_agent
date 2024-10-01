@@ -13,8 +13,6 @@ type Config struct {
 	Domains       map[string]struct{} `json:"-"`       // 域名列表, 用于快速查找
 	WafKey        string              `json:"waf_key"`
 	MaxBatchQuery int                 `json:"max_batch_query"`
-	MaxGas        uint64              `json:"max_gas"`
-	GotBanGas     uint64              `json:"got_ban_gas"`
 }
 
 var GlobalConfig = Config{}

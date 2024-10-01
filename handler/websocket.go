@@ -6,7 +6,6 @@ import (
 	"net/http"
 	"sync"
 
-	"github.com/48Club/service_agent/config"
 	"github.com/48Club/service_agent/ethclient"
 	"github.com/48Club/service_agent/limit"
 	"github.com/48Club/service_agent/tools"
@@ -76,14 +75,7 @@ func handleWebSocket(c *gin.Context, toHost string) {
 				limit.Limits.AllowPassCheck(ip)
 
 				if isRpc && messageType == websocket.TextMessage {
-					if reqCount, web3Reqi, mustSend2Sentry, sumGas, buildRespByAgent, resp, err := tools.DecodeRequestBody(isRpc, message); err == nil {
-						if sumGas > config.GlobalConfig.MaxGas {
-							_ = conn.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.ClosePolicyViolation, "Status Unprocessable Entity"))
-							if sumGas > config.GlobalConfig.GotBanGas {
-								go tools.BlockIP(ip)
-							}
-							return
-						}
+					if reqCount, web3Reqi, mustSend2Sentry, buildRespByAgent, resp, err := tools.DecodeRequestBody(isRpc, message); err == nil {
 						if addLimitBatchReq(ip, reqCount) {
 							_ = conn.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.ClosePolicyViolation, "Too many requests"))
 							return
