@@ -53,7 +53,7 @@ func handleWebSocket(c *gin.Context, toHost string) {
 		wg.Done()
 	}
 
-	isRpc, ip := c.GetBool("isRpc"), c.GetString("ip")
+	isRpc, ip, host := c.GetBool("isRpc"), c.GetString("ip"), c.Request.Host
 
 	go func() {
 		defer cancelConn(proxyConn)
@@ -75,7 +75,7 @@ func handleWebSocket(c *gin.Context, toHost string) {
 				limit.Limits.AllowPassCheck(ip)
 
 				if isRpc && messageType == websocket.TextMessage {
-					if reqCount, web3Reqi, mustSend2Sentry, buildRespByAgent, resp, err := tools.DecodeRequestBody(isRpc, message); err == nil {
+					if reqCount, web3Reqi, mustSend2Sentry, buildRespByAgent, resp, err := tools.DecodeRequestBody(isRpc, host, message); err == nil {
 						if addLimitBatchReq(ip, reqCount) {
 							_ = conn.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.ClosePolicyViolation, "Too many requests"))
 							return

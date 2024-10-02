@@ -206,7 +206,7 @@ func addLimitBatchReq(ip string, reqCount int) bool {
 }
 
 func rpcHandler(c *gin.Context, body []byte) {
-	reqCount, web3Reqi, mustSend2Sentry, buildRespByAgent, resp, err := tools.DecodeRequestBody(c.GetBool("isRpc"), body)
+	reqCount, web3Reqi, mustSend2Sentry, buildRespByAgent, resp, err := tools.DecodeRequestBody(c.GetBool("isRpc"), c.Request.Host, body)
 	if addLimitBatchReq(c.GetString("ip"), reqCount) {
 		c.AbortWithStatus(http.StatusTooManyRequests)
 		return

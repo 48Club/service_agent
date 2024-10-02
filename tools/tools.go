@@ -35,14 +35,14 @@ func CheckJOSNType(body []byte) byte {
 
 var BadBatchRequest = errors.New("bad batch request")
 
-func DecodeRequestBody(isRpc bool, body []byte) (reqCount int, i interface{}, mustSend2Sentry bool, buildRespByAgent bool, resp interface{}, err error) {
+func DecodeRequestBody(isRpc bool, host string, body []byte) (reqCount int, i interface{}, mustSend2Sentry bool, buildRespByAgent bool, resp interface{}, err error) {
 	switch CheckJOSNType(body) {
 	case 123: // {
 		var web3Req types.Web3ClientRequest
 		err = json.Unmarshal(body, &web3Req)
 		if err == nil {
 			resp, buildRespByAgent = methodWithResp[web3Req.Method]
-			return 1, web3Req, hasMethod(types.Web3ClientRequests{web3Req}), buildRespByAgent, resp, nil
+			return 1, web3Req, hasMethod(types.Web3ClientRequests{web3Req}), buildRespByAgent, set1weiGasPrice(host, web3Req.Method, resp), nil
 		}
 	case 91: // [
 		var web3Reqs types.Web3ClientRequests
@@ -50,6 +50,7 @@ func DecodeRequestBody(isRpc bool, body []byte) (reqCount int, i interface{}, mu
 		if err == nil {
 			if isRpc && len(web3Reqs) == 1 {
 				resp, buildRespByAgent = methodWithResp[web3Reqs[0].Method]
+				resp = set1weiGasPrice(host, web3Reqs[0].Method, resp)
 			}
 			return len(web3Reqs), web3Reqs, hasMethod(web3Reqs), buildRespByAgent, resp, nil
 		}
@@ -58,6 +59,13 @@ func DecodeRequestBody(isRpc bool, body []byte) (reqCount int, i interface{}, mu
 	}
 
 	return 1, nil, false, false, false, err
+}
+
+func set1weiGasPrice(h, m string, o interface{}) interface{} {
+	if h == "0.48.club" && m == "eth_gasPrice" {
+		return "0x1"
+	}
+	return o
 }
 
 func buildGethResponse(i interface{}, result interface{}) interface{} {
