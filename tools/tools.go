@@ -14,6 +14,19 @@ var toSentryMethod = map[string]struct{}{
 	"eth_get0GweiGasRemaining":    {},
 }
 
+func IsRpc(host string, d map[string]struct{}) bool {
+	_, ok := d[host]
+	if ok {
+		return true
+	}
+	// 判断 域名后缀是否包含 .rpc.48.club
+	if len(host) > 12 && host[len(host)-12:] == ".rpc.48.club" {
+		return true
+	}
+	return false
+
+}
+
 func hasMethod(t types.Web3ClientRequests) bool {
 	for _, v := range t {
 		_, ok := toSentryMethod[v.Method]

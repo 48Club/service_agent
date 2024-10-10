@@ -143,10 +143,7 @@ func LimitMiddleware2(ip string, pass bool, count int, res *types.LimitResponse)
 }
 
 func AnyHandler(c *gin.Context) {
-	_, ok := config.GlobalConfig.Domains[c.Request.Host]
-	if ok {
-		c.Set("isRpc", true)
-	}
+	c.Set("isRpc", tools.IsRpc(c.Request.Host, config.GlobalConfig.Domains))
 
 	var body = []byte{}
 	if c.Request.ContentLength != 0 {
