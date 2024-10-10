@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 
+	"github.com/48Club/service_agent/config"
 	"github.com/48Club/service_agent/types"
 	"github.com/gin-gonic/gin"
 )
@@ -12,6 +13,19 @@ var toSentryMethod = map[string]struct{}{
 	"eth_sendRawTransaction":      {},
 	"eth_sendBatchRawTransaction": {},
 	"eth_get0GweiGasRemaining":    {},
+}
+
+func IsRpc(host string, d map[string]struct{}) bool {
+	_, ok := config.GlobalConfig.Domains[host]
+	if ok {
+		return true
+	}
+	// 判断 域名后缀是否包含 .rpc.48.club
+	if len(host) > 8 && host[len(host)-8:] == ".rpc.48.club" {
+		return true
+	}
+	return false
+
 }
 
 func hasMethod(t types.Web3ClientRequests) bool {
