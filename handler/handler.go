@@ -202,8 +202,13 @@ func addLimitBatchReq(ip string, reqCount int) bool {
 	return tooManyRequests
 }
 
+var (
+	qpsStats = types.NewQpsStats()
+)
+
 func rpcHandler(c *gin.Context, body []byte) {
-	reqCount, web3Reqi, mustSend2Sentry, buildRespByAgent, resp, err := tools.DecodeRequestBody(c.GetBool("isRpc"), c.Request.Host, body)
+	reqCount, web3Reqi, mustSend2Sentry, buildRespByAgent, resp, ethCallCount, err := tools.DecodeRequestBody(c.GetBool("isRpc"), c.Request.Host, body)
+	go qpsStats.Add(reqCount, ethCallCount)
 	if addLimitBatchReq(c.GetString("ip"), reqCount) {
 		c.AbortWithStatus(http.StatusTooManyRequests)
 		return

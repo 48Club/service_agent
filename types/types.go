@@ -1,6 +1,11 @@
 package types
 
-import "encoding/json"
+import (
+	"encoding/json"
+	"log"
+	"sync"
+	"time"
+)
 
 type Web3ClientRequest struct {
 	JsonRPC string      `json:"jsonrpc"`
@@ -23,4 +28,55 @@ func (s HeaderStrs) ToString() string {
 		return "[]"
 	}
 	return string(b)
+}
+
+type QpsStats struct {
+	ByMinute map[time.Time]countHelper
+	sync.Mutex
+}
+
+type countHelper struct {
+	Count        int
+	EthCallCount int
+}
+
+func NewQpsStats() *QpsStats {
+	return &QpsStats{
+		ByMinute: make(map[time.Time]countHelper),
+	}
+}
+
+func (q *QpsStats) Add(c, e int) {
+	tt := time.Now().Truncate(time.Minute)
+
+	q.Lock()
+	defer q.Unlock()
+
+	q.prune(tt)
+
+	qc, ok := q.ByMinute[tt]
+	if !ok {
+		q.ByMinute[tt] = countHelper{
+			Count:        c,
+			EthCallCount: e,
+		}
+		return
+	}
+	q.ByMinute[tt] = countHelper{
+		Count:        qc.Count + c,
+		EthCallCount: qc.EthCallCount + e,
+	}
+}
+
+func (q *QpsStats) prune(t time.Time) {
+	if len(q.ByMinute) < 2 {
+		return
+	}
+
+	for k, v := range q.ByMinute {
+		if k != t {
+			log.Printf("[QPS Stat], Time: %s, QPS: %.2f, eth_call QPS: %.2f\n", t.Add(-1*time.Minute), float64(v.Count)/60, float64(v.EthCallCount)/60)
+			delete(q.ByMinute, k)
+		}
+	}
 }

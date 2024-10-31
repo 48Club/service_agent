@@ -27,14 +27,18 @@ func IsRpc(host string, d map[string]struct{}) bool {
 
 }
 
-func hasMethod(t types.Web3ClientRequests) bool {
+func iterateEthRequestMethod(t types.Web3ClientRequests) (mustSend2Sentry bool, ethCallCount int) {
 	for _, v := range t {
-		_, ok := toSentryMethod[v.Method]
-		if ok {
-			return true
+		if v.Method == "eth_call" {
+			ethCallCount++
+		} else if !mustSend2Sentry {
+			_, ok := toSentryMethod[v.Method]
+			if ok {
+				mustSend2Sentry = true
+			}
 		}
 	}
-	return false
+	return
 }
 
 func CheckJOSNType(body []byte) byte {
@@ -48,14 +52,15 @@ func CheckJOSNType(body []byte) byte {
 
 var BadBatchRequest = errors.New("bad batch request")
 
-func DecodeRequestBody(isRpc bool, host string, body []byte) (reqCount int, i interface{}, mustSend2Sentry bool, buildRespByAgent bool, resp interface{}, err error) {
+func DecodeRequestBody(isRpc bool, host string, body []byte) (reqCount int, i interface{}, mustSend2Sentry bool, buildRespByAgent bool, resp interface{}, ethCallCount int, err error) {
 	switch CheckJOSNType(body) {
 	case 123: // {
 		var web3Req types.Web3ClientRequest
 		err = json.Unmarshal(body, &web3Req)
 		if err == nil {
 			resp, buildRespByAgent = methodWithResp[web3Req.Method]
-			return 1, web3Req, hasMethod(types.Web3ClientRequests{web3Req}), buildRespByAgent, set1weiGasPrice(host, web3Req.Method, resp), nil
+			mustSend2Sentry, ethCallCount = iterateEthRequestMethod(types.Web3ClientRequests{web3Req})
+			return 1, web3Req, mustSend2Sentry, buildRespByAgent, set1weiGasPrice(host, web3Req.Method, resp), ethCallCount, nil
 		}
 	case 91: // [
 		var web3Reqs types.Web3ClientRequests
@@ -65,13 +70,14 @@ func DecodeRequestBody(isRpc bool, host string, body []byte) (reqCount int, i in
 				resp, buildRespByAgent = methodWithResp[web3Reqs[0].Method]
 				resp = set1weiGasPrice(host, web3Reqs[0].Method, resp)
 			}
-			return len(web3Reqs), web3Reqs, hasMethod(web3Reqs), buildRespByAgent, resp, nil
+			mustSend2Sentry, ethCallCount = iterateEthRequestMethod(web3Reqs)
+			return len(web3Reqs), web3Reqs, mustSend2Sentry, buildRespByAgent, resp, ethCallCount, nil
 		}
 	default:
 		err = errors.New("invalid request")
 	}
 
-	return 1, nil, false, false, false, err
+	return 0, nil, false, false, false, 0, err
 }
 
 func set1weiGasPrice(h, m string, o interface{}) interface{} {
