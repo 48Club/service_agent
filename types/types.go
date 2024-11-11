@@ -36,8 +36,9 @@ type QpsStats struct {
 }
 
 type countHelper struct {
-	Count        int
-	EthCallCount int
+	Count            int
+	EthCallCount     int
+	TransactionCount int
 }
 
 func NewQpsStats() *QpsStats {
@@ -46,7 +47,7 @@ func NewQpsStats() *QpsStats {
 	}
 }
 
-func (q *QpsStats) Add(c, e int) {
+func (q *QpsStats) Add(c, e, t int) {
 	tt := time.Now().Truncate(time.Minute)
 
 	q.Lock()
@@ -57,14 +58,16 @@ func (q *QpsStats) Add(c, e int) {
 	qc, ok := q.ByMinute[tt]
 	if !ok {
 		q.ByMinute[tt] = countHelper{
-			Count:        c,
-			EthCallCount: e,
+			Count:            c,
+			EthCallCount:     e,
+			TransactionCount: t,
 		}
 		return
 	}
 	q.ByMinute[tt] = countHelper{
-		Count:        qc.Count + c,
-		EthCallCount: qc.EthCallCount + e,
+		Count:            qc.Count + c,
+		EthCallCount:     qc.EthCallCount + e,
+		TransactionCount: qc.TransactionCount + t,
 	}
 }
 
@@ -75,7 +78,7 @@ func (q *QpsStats) prune(t time.Time) {
 
 	for k, v := range q.ByMinute {
 		if k != t {
-			log.Printf("[QPS Stat], Time: %s, QPS: %.2f, eth_call QPS: %.2f\n", t.Add(-1*time.Minute), float64(v.Count)/60, float64(v.EthCallCount)/60)
+			log.Printf("[QPS Stat], Time: %s, QPS: %.2f, eth_call QPS: %.2f, eth_sendTransaction QPS: %.2f\n", t.Add(-1*time.Minute), float64(v.Count)/60, float64(v.EthCallCount)/60, float64(v.TransactionCount)/60)
 			delete(q.ByMinute, k)
 		}
 	}

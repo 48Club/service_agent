@@ -8,10 +8,10 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-var toSentryMethod = map[string]struct{}{
-	"eth_sendRawTransaction":      {},
-	"eth_sendBatchRawTransaction": {},
-	"eth_get0GweiGasRemaining":    {},
+var toSentryMethod = map[string]int{
+	"eth_sendRawTransaction":      0,
+	"eth_sendBatchRawTransaction": 1,
+	"eth_get0GweiGasRemaining":    2,
 }
 
 func IsRpc(host string, d map[string]struct{}) bool {
@@ -27,14 +27,17 @@ func IsRpc(host string, d map[string]struct{}) bool {
 
 }
 
-func iterateEthRequestMethod(t types.Web3ClientRequests) (mustSend2Sentry bool, ethCallCount int) {
+func iterateEthRequestMethod(t types.Web3ClientRequests) (mustSend2Sentry bool, ethCallCount, ethSendRawTransaction int) {
 	for _, v := range t {
 		if v.Method == "eth_call" {
 			ethCallCount++
 		} else if !mustSend2Sentry {
-			_, ok := toSentryMethod[v.Method]
+			id, ok := toSentryMethod[v.Method]
 			if ok {
 				mustSend2Sentry = true
+				if id < 2 {
+					ethSendRawTransaction++
+				}
 			}
 		}
 	}
@@ -52,15 +55,15 @@ func CheckJOSNType(body []byte) byte {
 
 var BadBatchRequest = errors.New("bad batch request")
 
-func DecodeRequestBody(isRpc bool, host string, body []byte) (reqCount int, i interface{}, mustSend2Sentry bool, buildRespByAgent bool, resp interface{}, ethCallCount int, err error) {
+func DecodeRequestBody(isRpc bool, host string, body []byte) (reqCount int, i interface{}, mustSend2Sentry bool, buildRespByAgent bool, resp interface{}, ethCallCount, ethSendRawTransactionCount int, err error) {
 	switch CheckJOSNType(body) {
 	case 123: // {
 		var web3Req types.Web3ClientRequest
 		err = json.Unmarshal(body, &web3Req)
 		if err == nil {
 			resp, buildRespByAgent = methodWithResp[web3Req.Method]
-			mustSend2Sentry, ethCallCount = iterateEthRequestMethod(types.Web3ClientRequests{web3Req})
-			return 1, web3Req, mustSend2Sentry, buildRespByAgent, set1weiGasPrice(host, web3Req.Method, resp), ethCallCount, nil
+			mustSend2Sentry, ethCallCount, ethSendRawTransactionCount = iterateEthRequestMethod(types.Web3ClientRequests{web3Req})
+			return 1, web3Req, mustSend2Sentry, buildRespByAgent, set1weiGasPrice(host, web3Req.Method, resp), ethCallCount, ethSendRawTransactionCount, nil
 		}
 	case 91: // [
 		var web3Reqs types.Web3ClientRequests
@@ -70,14 +73,14 @@ func DecodeRequestBody(isRpc bool, host string, body []byte) (reqCount int, i in
 				resp, buildRespByAgent = methodWithResp[web3Reqs[0].Method]
 				resp = set1weiGasPrice(host, web3Reqs[0].Method, resp)
 			}
-			mustSend2Sentry, ethCallCount = iterateEthRequestMethod(web3Reqs)
-			return len(web3Reqs), web3Reqs, mustSend2Sentry, buildRespByAgent, resp, ethCallCount, nil
+			mustSend2Sentry, ethCallCount, ethSendRawTransactionCount = iterateEthRequestMethod(web3Reqs)
+			return len(web3Reqs), web3Reqs, mustSend2Sentry, buildRespByAgent, resp, ethCallCount, ethSendRawTransactionCount, nil
 		}
 	default:
 		err = errors.New("invalid request")
 	}
 
-	return 0, nil, false, false, false, 0, err
+	return 0, nil, false, false, false, 0, 0, err
 }
 
 func set1weiGasPrice(h, m string, o interface{}) interface{} {

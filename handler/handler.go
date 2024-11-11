@@ -207,8 +207,8 @@ var (
 )
 
 func rpcHandler(c *gin.Context, body []byte) {
-	reqCount, web3Reqi, mustSend2Sentry, buildRespByAgent, resp, ethCallCount, err := tools.DecodeRequestBody(c.GetBool("isRpc"), c.Request.Host, body)
-	go qpsStats.Add(reqCount, ethCallCount)
+	reqCount, web3Reqi, mustSend2Sentry, buildRespByAgent, resp, ethCallCount, ethSendRawTransactionCount, err := tools.DecodeRequestBody(c.GetBool("isRpc"), c.Request.Host, body)
+	go qpsStats.Add(reqCount, ethCallCount, ethSendRawTransactionCount)
 	if addLimitBatchReq(c.GetString("ip"), reqCount) {
 		c.AbortWithStatus(http.StatusTooManyRequests)
 		return
