@@ -4,8 +4,12 @@ import (
 	"encoding/json"
 	"errors"
 
+	"github.com/48Club/service_agent/database"
 	"github.com/48Club/service_agent/types"
+	"github.com/ethereum/go-ethereum/common/hexutil"
+	types2 "github.com/ethereum/go-ethereum/core/types"
 	"github.com/gin-gonic/gin"
+	"gorm.io/gorm"
 )
 
 var toSentryMethod = map[string]int{
@@ -90,7 +94,14 @@ func set1weiGasPrice(h, m string, o interface{}) interface{} {
 	return o
 }
 
-func buildGethResponse(i interface{}, result interface{}) interface{} {
+func buildGethResponse(host string, i, result interface{}) interface{} {
+	switch x := result.(type) {
+	case func(*gorm.DB, string) int64:
+		result = x(database.Server.DB, host)
+	case func(*gorm.DB, string) []string:
+		result = x(database.Server.DB, host)
+	}
+
 	if _req, ok := i.(types.Web3ClientRequest); ok {
 		return gin.H{
 			"jsonrpc": _req.JsonRPC,
@@ -115,15 +126,59 @@ var (
 		"eth_gasPrice":       ethGasPrice,
 		"web3_clientVersion": web3ClientVersion,
 		"eth_chainId":        ethChainId,
+		"stat_walletCount":   database.WalletCount,
+		"stat_txCount":       database.TxCount,
+		"stat_walletList":    database.WalletList,
 	}
 )
 
 const (
 	ethGasPrice       = "0x3b9aca00"
-	web3ClientVersion = "Geth/v1.4.11/linux-amd64/go1.22.4"
+	web3ClientVersion = "Geth/v1.4.15-ec318b9c-20240919/linux-amd64/go1.22.7/48Club"
 	ethChainId        = "0x38"
 )
 
-func EthResp(i, resp interface{}) interface{} {
-	return buildGethResponse(i, resp)
+func EthResp(host string, i, resp interface{}) interface{} {
+	return buildGethResponse(host, i, resp)
+}
+
+func decodeCallData(calldata types.Web3ClientRequest) []*types2.Transaction {
+	id, ok := toSentryMethod[calldata.Method]
+	if ok && id < 2 {
+		return decodeTx(calldata.Params)
+	}
+	return []*types2.Transaction{}
+}
+
+func decodeTx(params []interface{}) []*types2.Transaction {
+	txs := []*types2.Transaction{}
+	for _, i := range params {
+		hexTx, ok := i.(string)
+		if !ok {
+			continue
+		}
+		rlpTx, err := hexutil.Decode(hexTx)
+		if err != nil {
+			continue
+		}
+		tx := &types2.Transaction{}
+		if err := tx.UnmarshalBinary(rlpTx); err != nil {
+			continue
+		}
+		txs = append(txs, tx)
+	}
+	return txs
+}
+
+func DecodeTx(i interface{}) types.Transactions {
+	if calldata, ok := i.(types.Web3ClientRequest); ok {
+		return decodeCallData(calldata)
+	} else if calldatas, ok := i.(types.Web3ClientRequests); ok {
+		txs := []*types2.Transaction{}
+		for _, calldata := range calldatas {
+			txs = append(txs, decodeCallData(calldata)...)
+		}
+		return txs
+	}
+	return []*types2.Transaction{}
 }

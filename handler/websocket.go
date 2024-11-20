@@ -85,7 +85,7 @@ func handleWebSocket(c *gin.Context, toHost string) {
 
 						if buildRespByAgent {
 							// 由 agent 生成响应
-							if err := conn.WriteJSON(tools.EthResp(web3Reqi, resp)); err != nil {
+							if err := conn.WriteJSON(tools.EthResp(host, web3Reqi, resp)); err != nil {
 								log.Println("Write error to client:", err)
 								return
 							}

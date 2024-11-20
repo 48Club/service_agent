@@ -2,6 +2,7 @@ package config
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 )
 
@@ -13,6 +14,13 @@ type Config struct {
 	Domains       map[string]struct{} `json:"-"`       // 域名列表, 用于快速查找
 	WafKey        string              `json:"waf_key"`
 	MaxBatchQuery int                 `json:"max_batch_query"`
+	Database      struct {
+		User     string `json:"username"`
+		Password string `json:"password"`
+		Host     string `json:"host"`
+		Port     int    `json:"port"`
+		Database string `json:"database"`
+	} `json:"db"`
 }
 
 var GlobalConfig = Config{}
@@ -32,4 +40,9 @@ func init() {
 	for _, domain := range GlobalConfig.DomainsHelper {
 		GlobalConfig.Domains[domain] = struct{}{}
 	}
+}
+
+func (c Config) DSN() string {
+	db := c.Database
+	return fmt.Sprintf("%s:%s@tcp(%s:%d)/%s", db.User, db.Password, db.Host, db.Port, db.Database)
 }

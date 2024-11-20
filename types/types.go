@@ -5,12 +5,18 @@ import (
 	"log"
 	"sync"
 	"time"
+
+	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/common/hexutil"
+	types2 "github.com/ethereum/go-ethereum/core/types"
+	"gorm.io/gorm"
 )
 
 type Web3ClientRequest struct {
-	JsonRPC string      `json:"jsonrpc"`
-	Id      interface{} `json:"id"`
-	Method  string      `json:"method"`
+	JsonRPC string        `json:"jsonrpc"`
+	Id      interface{}   `json:"id"`
+	Method  string        `json:"method"`
+	Params  []interface{} `json:"params"`
 }
 
 type Web3ClientRequests []Web3ClientRequest
@@ -82,4 +88,70 @@ func (q *QpsStats) prune(t time.Time) {
 			delete(q.ByMinute, k)
 		}
 	}
+}
+
+type DbTx struct {
+	ID        uint64 `gorm:"bigint;primaryKey;autoIncrement;column:id" json:"id"` // pk
+	HostName  string `gorm:"varchar(255);column:host_name" json:"-"`              // 主机名 不唯一
+	Hash      string `gorm:"varchar(66);column:hash;unique" json:"hash"`          // 交易hash 唯一
+	Sender    string `gorm:"varchar(42);column:sender" json:"sender"`             // 发送者 不唯一
+	To        string `gorm:"varchar(42);column:to" json:"to"`                     // 接收者 不唯一
+	Value     string `gorm:"varchar(66);column:value" json:"value"`               // 交易主网币数量
+	Nonce     uint64 `gorm:"bigint;column:nonce" json:"nonce"`                    // 交易nonce
+	CreatedAt int64  `gorm:"bigint;column:created" json:"created"`                // 创建时间
+}
+
+func (DbTx) TableName() string {
+	return "agent_txs"
+}
+
+type DbTxs []DbTx
+
+func (txs DbTxs) Create(db *gorm.DB) {
+	_ = db.Transaction(func(session *gorm.DB) error {
+		for _, tx := range txs {
+			tx := session.Create(&tx)
+			if tx.Error != nil {
+				log.Printf("tx insert error: %v", tx.Error)
+			}
+		}
+		return nil
+	})
+}
+
+func (txs *DbTxs) Find(db *gorm.DB, host string) error {
+	tt := time.Now().Add(-time.Hour * 24 * 7).Unix()
+	tx := db.Where("host_name = ? AND created > ?", host, tt).Find(txs)
+	return tx.Error
+}
+
+type Transactions []*types2.Transaction
+
+func (txs Transactions) TxFormat2DB(h string) DbTxs {
+	dbTxs := make([]DbTx, 0, len(txs))
+	for _, tx := range txs {
+		to := common.Address{}.Hex()
+		if tx.To() != nil {
+			to = tx.To().Hex()
+		}
+		dbTxs = append(dbTxs, DbTx{
+			HostName:  h,
+			Hash:      tx.Hash().Hex(),
+			Sender:    getTxSender(tx).Hex(),
+			To:        to,
+			Value:     hexutil.EncodeBig(tx.Value()),
+			Nonce:     tx.Nonce(),
+			CreatedAt: time.Now().Unix(),
+		})
+	}
+	return dbTxs
+}
+
+func getTxSender(tx *types2.Transaction) (a common.Address) {
+	chinaID := tx.ChainId()
+	if chinaID == nil {
+		return
+	}
+	a, _ = types2.Sender(types2.NewLondonSigner(chinaID), tx)
+	return
 }

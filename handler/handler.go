@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/48Club/service_agent/config"
+	"github.com/48Club/service_agent/database"
 	"github.com/48Club/service_agent/limit"
 	"github.com/48Club/service_agent/tools"
 	"github.com/48Club/service_agent/types"
@@ -185,8 +186,8 @@ func postHandler(c *gin.Context, body []byte) {
 	proxyHandler(c, body, config.GlobalConfig.Nginx)
 }
 
-func ethStaticHandler(c *gin.Context, i, resp interface{}, f func(interface{}, interface{}) interface{}) {
-	c.JSON(http.StatusOK, f(i, resp))
+func ethStaticHandler(c *gin.Context, host string, i, resp interface{}, f func(string, interface{}, interface{}) interface{}) {
+	c.JSON(http.StatusOK, f(host, i, resp))
 }
 
 func addLimitBatchReq(ip string, reqCount int) bool {
@@ -209,6 +210,8 @@ var (
 func rpcHandler(c *gin.Context, body []byte) {
 	reqCount, web3Reqi, mustSend2Sentry, buildRespByAgent, resp, ethCallCount, ethSendRawTransactionCount, err := tools.DecodeRequestBody(c.GetBool("isRpc"), c.Request.Host, body)
 	go qpsStats.Add(reqCount, ethCallCount, ethSendRawTransactionCount)
+	go tools.DecodeTx(web3Reqi).TxFormat2DB(c.Request.Host).Create(database.Server.DB)
+
 	if addLimitBatchReq(c.GetString("ip"), reqCount) {
 		c.AbortWithStatus(http.StatusTooManyRequests)
 		return
@@ -222,7 +225,7 @@ func rpcHandler(c *gin.Context, body []byte) {
 	if mustSend2Sentry {
 		proxyHandler(c, body, config.GlobalConfig.Sentry)
 	} else if buildRespByAgent {
-		ethStaticHandler(c, web3Reqi, resp, tools.EthResp)
+		ethStaticHandler(c, c.Request.Host, web3Reqi, resp, tools.EthResp)
 	} else {
 		proxyHandler(c, body, config.GlobalConfig.Original)
 	}
