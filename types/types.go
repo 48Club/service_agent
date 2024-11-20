@@ -2,6 +2,7 @@ package types
 
 import (
 	"encoding/json"
+	"errors"
 	"log"
 	"sync"
 	"time"
@@ -9,6 +10,7 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	types2 "github.com/ethereum/go-ethereum/core/types"
+	"github.com/go-sql-driver/mysql"
 	"gorm.io/gorm"
 )
 
@@ -107,12 +109,19 @@ func (DbTx) TableName() string {
 
 type DbTxs []DbTx
 
-func (txs DbTxs) Create(db *gorm.DB) {
+func (txs DbTxs) Create(db *gorm.DB, removeCache func(string)) {
 	_ = db.Transaction(func(session *gorm.DB) error {
 		for _, tx := range txs {
-			tx := session.Create(&tx)
-			if tx.Error != nil {
-				log.Printf("tx insert error: %v", tx.Error)
+			result := session.Create(&tx)
+			if err := result.Error; err != nil {
+				if errors.Is(err, gorm.ErrDuplicatedKey) {
+					continue
+				}
+				if mysqlErr, ok := err.(*mysql.MySQLError); ok && mysqlErr.Number == 1062 {
+					continue
+				}
+				log.Printf("tx insert error: %v", err)
+				removeCache(tx.Hash)
 			}
 		}
 		return nil
@@ -127,22 +136,27 @@ func (txs *DbTxs) Find(db *gorm.DB, host string) error {
 
 type Transactions []*types2.Transaction
 
-func (txs Transactions) TxFormat2DB(h string) DbTxs {
+func (txs Transactions) TxFormat2DB(h string, isTxExist func(string) bool, addCache func(string)) DbTxs {
 	dbTxs := make([]DbTx, 0, len(txs))
 	for _, tx := range txs {
+		txHash := tx.Hash().Hex()
+		if isTxExist(txHash) {
+			continue
+		}
 		to := common.Address{}.Hex()
 		if tx.To() != nil {
 			to = tx.To().Hex()
 		}
 		dbTxs = append(dbTxs, DbTx{
 			HostName:  h,
-			Hash:      tx.Hash().Hex(),
+			Hash:      txHash,
 			Sender:    getTxSender(tx).Hex(),
 			To:        to,
 			Value:     hexutil.EncodeBig(tx.Value()),
 			Nonce:     tx.Nonce(),
 			CreatedAt: time.Now().Unix(),
 		})
+		addCache(txHash)
 	}
 	return dbTxs
 }
