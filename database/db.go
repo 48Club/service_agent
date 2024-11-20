@@ -23,7 +23,9 @@ var (
 
 // create database agent
 func init() {
-	engine, err := gorm.Open(mysql.Open(config.GlobalConfig.DSN()), &gorm.Config{})
+	engine, err := gorm.Open(mysql.Open(config.GlobalConfig.DSN()), &gorm.Config{
+		Logger: logger.Default.LogMode(logger.Silent), // 关闭 MySQL 日志
+	})
 	if err != nil {
 		panic(err)
 	}
@@ -32,8 +34,6 @@ func init() {
 	if err != nil {
 		panic(err)
 	}
-
-	engine.Logger.LogMode(logger.Silent) // 关闭 MySQL 日志
 
 	Server.DB = engine
 	Server.txHashCache = lru.NewCache[string, struct{}](5000)
