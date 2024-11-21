@@ -1,6 +1,7 @@
 package test
 
 import (
+	"encoding/json"
 	"math/big"
 	"testing"
 
@@ -13,6 +14,16 @@ import (
 
 func TestHexFormat(t *testing.T) {
 	t.Log(hexutil.EncodeBig(big.NewInt(1e9)))
+}
+
+func TestXxx(t *testing.T) {
+	s := `{"jsonrpc":"2.0","method":"eth_call","params":[{"to":"0x0000000000000000000000000000000000000048","value":"0x30"}],"id":83}`
+	var w3 types.Web3ClientRequest
+	err := json.Unmarshal([]byte(s), &w3)
+	assert.Nil(t, err)
+	var resp interface{} = 123
+	// assert.True(t, decodeEthCall(&resp, w3.Method, false, w3.Params))
+	assert.Equal(t, "0x30", resp)
 }
 
 func TestMapSetTest(t *testing.T) {
