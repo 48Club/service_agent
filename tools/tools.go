@@ -18,6 +18,7 @@ var toSentryMethod = map[string]int{
 	"eth_sendRawTransaction":      0,
 	"eth_sendBatchRawTransaction": 1,
 	"eth_get0GweiGasRemaining":    2,
+	"pm_isSponsorable":            3,
 }
 
 func IsRpc(host string, d map[string]struct{}) bool {
