@@ -287,4 +287,6 @@ var (
 func init() {
 	httpTransport.DisableCompression = true
 	httpTransport.DisableKeepAlives = false
+	httpTransport.MaxIdleConns = 120
+	httpTransport.IdleConnTimeout = 65 * time.Second
 }
