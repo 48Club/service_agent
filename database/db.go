@@ -2,6 +2,7 @@ package database
 
 import (
 	"sync"
+	"time"
 
 	"github.com/48Club/service_agent/config"
 	"github.com/48Club/service_agent/types"
@@ -39,6 +40,8 @@ func init() {
 	Server.txHashCache = lru.NewCache[string, struct{}](5000)
 
 	go loadCache()
+
+	go pruneDB()
 }
 
 func loadCache() {
@@ -49,6 +52,15 @@ func loadCache() {
 	}
 }
 
+func pruneDB() {
+	for {
+		tx := Server.Unscoped().Where("created < ?", time.Now().Add(-time.Hour*24*7).Unix()).Limit(1000).Delete(&types.DbTx{}).Commit()
+		if tx.RowsAffected < 1000 {
+			time.Sleep(time.Hour)
+		}
+		time.Sleep(time.Second)
+	}
+}
 func IsTxExist(hash string) bool {
 	Server.rw.RLock()
 	defer Server.rw.RUnlock()
@@ -69,16 +81,21 @@ func RemoveCache(hash string) {
 }
 
 func WalletCount(db *gorm.DB, host string) (count int64) {
-	db.Model(&types.DbTx{}).Where("host_name = ?", host).Group("sender").Count(&count)
+	limit7days(db.Model(&types.DbTx{})).Where("host_name = ?", host).Group("sender").Count(&count)
 	return
 }
 
+func limit7days(tx *gorm.DB) *gorm.DB {
+	tt := time.Now().Add(-time.Hour * 24 * 7).Unix()
+	return tx.Where("created > ?", tt)
+}
+
 func TxCount(db *gorm.DB, host string) (count int64) {
-	db.Model(&types.DbTx{}).Where("host_name = ?", host).Count(&count)
+	limit7days(db.Model(&types.DbTx{})).Where("host_name = ?", host).Count(&count)
 	return
 }
 
 func WalletList(db *gorm.DB, host string) (wallets []string) {
-	db.Model(&types.DbTx{}).Where("host_name = ?", host).Group("sender").Pluck("sender", &wallets)
+	limit7days(db.Model(&types.DbTx{})).Where("host_name = ?", host).Group("sender").Pluck("sender", &wallets)
 	return
 }
