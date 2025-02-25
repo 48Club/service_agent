@@ -68,7 +68,7 @@ func handleWebSocket(c *gin.Context, toHost string) {
 					return
 				}
 
-				if LimitMiddleware2(ip, true, 1, nil) {
+				if LimitMiddleware2(ip, true, 1, nil, serverStat) {
 					_ = conn.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.ClosePolicyViolation, "Too many requests"))
 					return
 				}
@@ -76,7 +76,10 @@ func handleWebSocket(c *gin.Context, toHost string) {
 
 				if isRpc && messageType == websocket.TextMessage {
 					if reqCount, web3Reqi, mustSend2Sentry, buildRespByAgent, resp, ethCallCount, ethSendRawTransactionCount, err := tools.DecodeRequestBody(isRpc, host, message); err == nil {
-						go qpsStats.Add(reqCount, ethCallCount, ethSendRawTransactionCount)
+						go func(_reqCount, _ethCallCount, _ethSendRawTransactionCount int) {
+							serverStat = limit.LeakyBucket.Acquire(_ethCallCount)
+							qpsStats.Add(_reqCount, _ethCallCount, _ethSendRawTransactionCount)
+						}(reqCount, ethCallCount, ethSendRawTransactionCount)
 						if addLimitBatchReq(ip, reqCount) {
 							// 429 Too Many Requests
 							_ = conn.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.ClosePolicyViolation, "Too many requests"))

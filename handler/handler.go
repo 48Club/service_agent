@@ -97,10 +97,11 @@ func SetMaxRequestBodySize(c *gin.Context) {
 	c.Request.Body = io.NopCloser(bytes.NewReader(body))
 }
 
+var serverStat bool = true
+
 func LimitMiddleware(c *gin.Context) {
 	userIP, fromCDN, _ := tools.CheckGinIP(c)
 	c.Set("ip", userIP)
-
 	if !fromCDN {
 		c.AbortWithStatus(http.StatusForbidden)
 		return
@@ -111,7 +112,7 @@ func LimitMiddleware(c *gin.Context) {
 	}
 
 	var limitHeader = types.LimitResponse{}
-	tooManyRequests := LimitMiddleware2(userIP, true, 1, &limitHeader)
+	tooManyRequests := LimitMiddleware2(userIP, true, 1, &limitHeader, serverStat)
 
 	c.Header("X-RateLimit-Remaining", limitHeader.Remaining.ToString())
 	c.Header("X-RateLimit-Limit", limitHeader.Limit.ToString())
@@ -126,11 +127,11 @@ func LimitMiddleware(c *gin.Context) {
 	limit.Limits.AllowPassCheck(userIP)
 }
 
-func LimitMiddleware2(ip string, pass bool, count int, res *types.LimitResponse) bool {
+func LimitMiddleware2(ip string, pass bool, count int, res *types.LimitResponse, seriveStat bool) bool {
 	tooManyRequests := false
 
 	for _, limit := range limit.Limits {
-		limiter := limit.Allow(ip, pass, count)
+		limiter := limit.Allow(ip, pass, count, seriveStat)
 		if res != nil {
 			res.Limit = append(res.Limit, fmt.Sprintf("%d/%s", limiter.Limit, limiter.Wind))
 			res.Remaining = append(res.Remaining, fmt.Sprintf("%d/%s", limiter.Limit-limiter.Used, limiter.Wind))
@@ -199,7 +200,7 @@ func addLimitBatchReq(ip string, reqCount int) bool {
 		go tools.BlockIP(ip)
 		return true
 	}
-	tooManyRequests := LimitMiddleware2(ip, false, reqCount, nil)
+	tooManyRequests := LimitMiddleware2(ip, false, reqCount, nil, serverStat)
 	return tooManyRequests
 }
 
@@ -209,7 +210,10 @@ var (
 
 func rpcHandler(c *gin.Context, body []byte) {
 	reqCount, web3Reqi, mustSend2Sentry, buildRespByAgent, resp, ethCallCount, ethSendRawTransactionCount, err := tools.DecodeRequestBody(c.GetBool("isRpc"), c.Request.Host, body)
-	go qpsStats.Add(reqCount, ethCallCount, ethSendRawTransactionCount)
+	go func(_reqCount, _ethCallCount, _ethSendRawTransactionCount int) {
+		serverStat = limit.LeakyBucket.Acquire(_ethCallCount)
+		qpsStats.Add(_reqCount, _ethCallCount, _ethSendRawTransactionCount)
+	}(reqCount, ethCallCount, ethSendRawTransactionCount)
 	go tools.DecodeTx(web3Reqi).TxFormat2DB(c.Request.Host, database.IsTxExist, database.AddCache).Create(database.Server.DB, database.RemoveCache)
 
 	if addLimitBatchReq(c.GetString("ip"), reqCount) {

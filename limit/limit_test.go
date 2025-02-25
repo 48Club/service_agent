@@ -7,12 +7,11 @@ import (
 )
 
 func TestLimit(t *testing.T) {
-	limit := 500000
 	window := 7 * time.Second
-	rl := NewIPBasedRateLimiter(limit, window, "")
+	rl := NewIPBasedRateLimiter(make(lhLimit), window, "")
 	allowedCount, deniedCount := 0, 0
 	for i := 0; i < 1000000; i++ {
-		if rl.Allow("8.8.8.8", false, 1).Allow {
+		if rl.Allow("8.8.8.8", false, 1, true).Allow {
 			allowedCount++
 		} else {
 			deniedCount++
