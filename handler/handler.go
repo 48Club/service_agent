@@ -12,7 +12,6 @@ import (
 	"time"
 
 	"github.com/48Club/service_agent/config"
-	"github.com/48Club/service_agent/database"
 	"github.com/48Club/service_agent/limit"
 	"github.com/48Club/service_agent/tools"
 	"github.com/48Club/service_agent/types"
@@ -97,25 +96,24 @@ func SetMaxRequestBodySize(c *gin.Context) {
 	c.Request.Body = io.NopCloser(bytes.NewReader(body))
 }
 
-var serverStat bool = true
-
 func LimitMiddleware(c *gin.Context) {
-	userIP, fromCDN, _ := tools.CheckGinIP(c)
-	c.Set("ip", userIP)
+	userIP, fromCDN := tools.CheckGinIP(c)
 	if !fromCDN {
 		c.AbortWithStatus(http.StatusForbidden)
 		return
 	}
+
+	c.Set("ip", userIP)
 
 	if c.IsWebsocket() && c.Request.Method == http.MethodGet {
 		return
 	}
 
 	var limitHeader = types.LimitResponse{}
-	tooManyRequests := LimitMiddleware2(userIP, true, 1, &limitHeader, serverStat)
+	tooManyRequests := LimitMiddleware2(userIP, true, 1, &limitHeader)
 
-	c.Header("X-RateLimit-Remaining", limitHeader.Remaining.ToString())
-	c.Header("X-RateLimit-Limit", limitHeader.Limit.ToString())
+	limitHeader.AddHeader(c)
+
 	c.Header("X-Powered-By", "https://x.com/48club_official")
 	c.Request.Header.Set("X-Forwarded-For", userIP)
 
@@ -124,14 +122,13 @@ func LimitMiddleware(c *gin.Context) {
 		return
 	}
 
-	limit.Limits.AllowPassCheck(userIP)
 }
 
-func LimitMiddleware2(ip string, pass bool, count int, res *types.LimitResponse, seriveStat bool) bool {
+func LimitMiddleware2(ip string, pass bool, count int, res *types.LimitResponse) bool {
 	tooManyRequests := false
 
 	for _, limit := range limit.Limits {
-		limiter := limit.Allow(ip, pass, count, seriveStat)
+		limiter := limit.Allow(ip, pass, count)
 		if res != nil {
 			res.Limit = append(res.Limit, fmt.Sprintf("%d/%s", limiter.Limit, limiter.Wind))
 			res.Remaining = append(res.Remaining, fmt.Sprintf("%d/%s", limiter.Limit-limiter.Used, limiter.Wind))
@@ -159,36 +156,16 @@ func AnyHandler(c *gin.Context) {
 	case http.MethodOptions:
 		c.AbortWithStatus(http.StatusNoContent)
 	case http.MethodPost:
-		if c.Request.Host == "rpc-bsc.48.club" && c.Request.URL.Path == "/erigon/" {
-			proxyHandler(c, body, config.GlobalConfig.Nginx)
-			return
-		}
-		postHandler(c, body)
+		rpcHandler(c, body)
 	case http.MethodGet:
 
 		if c.Request.URL.Path == "/ws/" && c.IsWebsocket() {
-			if c.GetBool("isRpc") {
-				handleWebSocket(c, fmt.Sprintf("ws://%s", strings.Split(config.GlobalConfig.Original, "://")[1]))
-				return
-			}
+			handleWebSocket(c, fmt.Sprintf("ws://%s", strings.Split(config.GlobalConfig.Sentry, "://")[1]))
 		}
 		fallthrough
 	default:
-		proxyHandler(c, body, config.GlobalConfig.Nginx)
+		proxyHandler(c, body, config.GlobalConfig.Sentry)
 	}
-}
-
-func postHandler(c *gin.Context, body []byte) {
-	if c.GetBool("isRpc") {
-		rpcHandler(c, body)
-		return
-	}
-
-	proxyHandler(c, body, config.GlobalConfig.Nginx)
-}
-
-func ethStaticHandler(c *gin.Context, host string, i, resp interface{}, f func(string, interface{}, interface{}) interface{}) {
-	c.JSON(http.StatusOK, f(host, i, resp))
 }
 
 func addLimitBatchReq(ip string, reqCount int) bool {
@@ -197,42 +174,24 @@ func addLimitBatchReq(ip string, reqCount int) bool {
 	}
 	reqCount = 2*reqCount - 1
 	if reqCount > config.GlobalConfig.MaxBatchQuery {
-		go tools.BlockIP(ip)
 		return true
 	}
-	tooManyRequests := LimitMiddleware2(ip, false, reqCount, nil, serverStat)
-	return tooManyRequests
+	return LimitMiddleware2(ip, false, reqCount, nil)
 }
 
-var (
-	qpsStats = types.NewQpsStats()
-)
-
 func rpcHandler(c *gin.Context, body []byte) {
-	reqCount, web3Reqi, mustSend2Sentry, buildRespByAgent, resp, ethCallCount, ethSendRawTransactionCount, err := tools.DecodeRequestBody(c.GetBool("isRpc"), c.Request.Host, body)
-	go func(_reqCount, _ethCallCount, _ethSendRawTransactionCount int) {
-		serverStat = limit.LeakyBucket.Acquire(_ethCallCount)
-		qpsStats.Add(_reqCount, _ethCallCount, _ethSendRawTransactionCount)
-	}(reqCount, ethCallCount, ethSendRawTransactionCount)
-	go tools.DecodeTx(web3Reqi).TxFormat2DB(c.Request.Host, database.IsTxExist, database.AddCache).Create(database.Server.DB, database.RemoveCache)
+	resp, buildRespByAgent, batchCount := tools.DecodeRequestBody(c.Request.Host, body)
 
-	if addLimitBatchReq(c.GetString("ip"), reqCount) {
+	if addLimitBatchReq(c.GetString("ip"), batchCount) {
 		c.AbortWithStatus(http.StatusTooManyRequests)
 		return
 	}
-
-	if err != nil {
-		c.AbortWithStatus(http.StatusBadRequest)
+	if buildRespByAgent {
+		c.JSON(http.StatusOK, resp)
 		return
 	}
 
-	if mustSend2Sentry {
-		proxyHandler(c, body, config.GlobalConfig.Sentry)
-	} else if buildRespByAgent {
-		ethStaticHandler(c, c.Request.Host, web3Reqi, resp, tools.EthResp)
-	} else {
-		proxyHandler(c, body, config.GlobalConfig.Original)
-	}
+	proxyHandler(c, body, config.GlobalConfig.Sentry)
 }
 
 func proxyHandler(c *gin.Context, body []byte, toHost string) {

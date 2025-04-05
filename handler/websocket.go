@@ -6,7 +6,6 @@ import (
 	"net/http"
 	"sync"
 
-	"github.com/48Club/service_agent/ethclient"
 	"github.com/48Club/service_agent/limit"
 	"github.com/48Club/service_agent/tools"
 	"github.com/gin-gonic/gin"
@@ -53,7 +52,7 @@ func handleWebSocket(c *gin.Context, toHost string) {
 		wg.Done()
 	}
 
-	isRpc, ip, host := c.GetBool("isRpc"), c.GetString("ip"), c.Request.Host
+	ip, host := c.GetString("ip"), c.Request.Host
 
 	go func() {
 		defer cancelConn(proxyConn)
@@ -68,45 +67,28 @@ func handleWebSocket(c *gin.Context, toHost string) {
 					return
 				}
 
-				if LimitMiddleware2(ip, true, 1, nil, serverStat) {
+				if LimitMiddleware2(ip, true, 1, nil) {
 					_ = conn.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.ClosePolicyViolation, "Too many requests"))
 					return
 				}
 				limit.Limits.AllowPassCheck(ip)
 
-				if isRpc && messageType == websocket.TextMessage {
-					if reqCount, web3Reqi, mustSend2Sentry, buildRespByAgent, resp, ethCallCount, ethSendRawTransactionCount, err := tools.DecodeRequestBody(isRpc, host, message); err == nil {
-						go func(_reqCount, _ethCallCount, _ethSendRawTransactionCount int) {
-							serverStat = limit.LeakyBucket.Acquire(_ethCallCount)
-							qpsStats.Add(_reqCount, _ethCallCount, _ethSendRawTransactionCount)
-						}(reqCount, ethCallCount, ethSendRawTransactionCount)
-						if addLimitBatchReq(ip, reqCount) {
-							// 429 Too Many Requests
-							_ = conn.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.ClosePolicyViolation, "Too many requests"))
+				if messageType == websocket.TextMessage {
+					resp, buildRespByAgent, batchCount := tools.DecodeRequestBody(host, message)
+
+					if addLimitBatchReq(ip, batchCount) {
+						// 429 Too Many Requests
+						_ = conn.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.ClosePolicyViolation, "Too many requests"))
+						return
+					}
+
+					if buildRespByAgent {
+						// 由 agent 生成响应
+						if err := conn.WriteJSON(resp); err != nil {
+							log.Println("Write error to client:", err)
 							return
 						}
-
-						if buildRespByAgent {
-							// 由 agent 生成响应
-							if err := conn.WriteJSON(tools.EthResp(host, web3Reqi, resp)); err != nil {
-								log.Println("Write error to client:", err)
-								return
-							}
-							continue
-						} else if mustSend2Sentry {
-							// 需要发送到 sentry
-							msg, err := ethclient.Send2Sentry(message)
-							if err != nil {
-								_ = conn.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseInternalServerErr, err.Error()))
-								return
-							}
-							// 返回 sentry 的响应
-							if err := conn.WriteMessage(messageType, msg); err != nil {
-								log.Println("Write error to client:", err)
-								return
-							}
-							continue
-						}
+						continue
 					}
 
 				}

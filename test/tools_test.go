@@ -36,6 +36,6 @@ func TestMapSetTest(t *testing.T) {
 
 func TestLimitRes(t *testing.T) {
 	l := types.LimitResponse{}
-	handler.LimitMiddleware2("0.0.0.0", false, 1, &l, true)
+	handler.LimitMiddleware2("0.0.0.0", false, 1, &l)
 	t.Log(l.Limit.ToString(), l.Remaining.ToString())
 }

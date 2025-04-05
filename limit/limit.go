@@ -25,34 +25,31 @@ func (iprls IPBasedRateLimiters) Prune(ip string) {
 
 func init() {
 	Limits = IPBasedRateLimiters{
-		NewIPBasedRateLimiter(lhLimit{true: 80, false: 48}, time.Second*5, "5s"),         // [9.6|16]qps
-		NewIPBasedRateLimiter(lhLimit{true: 720, false: 432}, time.Minute, "1m"),         // [7.2|12]qps
-		NewIPBasedRateLimiter(lhLimit{true: 345600, false: 207360}, time.Hour*24, "24h"), // [2.4|4]qps
+		NewIPBasedRateLimiter(80, time.Second*5, "5s"), // [9.6|16]qps
+		NewIPBasedRateLimiter(720, time.Minute, "1m"),  // [7.2|12]qps
 	}
 }
-
-type lhLimit map[bool]int
 
 // 修改为 FixedWindowRateLimiter
 type FixedWindowRateLimiter struct {
 	mu        sync.Mutex
 	count     int           // 当前窗口内的请求计数
 	lastReset time.Time     // 上次窗口重置时间
-	limit     lhLimit       // 限制配额
+	limit     int           // 限制配额
 	window    time.Duration // 窗口大小
 	window2   string        // 窗口标识
 }
 
-func NewFixedWindowRateLimiter(_lhLimit lhLimit, window time.Duration, window2 string) *FixedWindowRateLimiter {
+func NewFixedWindowRateLimiter(limit int, window time.Duration, window2 string) *FixedWindowRateLimiter {
 	return &FixedWindowRateLimiter{
-		limit:     _lhLimit,
+		limit:     limit,
 		window:    window,
 		window2:   window2,
 		lastReset: time.Now(),
 	}
 }
 
-func (rl *FixedWindowRateLimiter) Allow(pass bool, count int, seriveStat bool) IsAllow {
+func (rl *FixedWindowRateLimiter) Allow(pass bool, count int) IsAllow {
 	rl.mu.Lock()
 	defer rl.mu.Unlock()
 
@@ -65,38 +62,38 @@ func (rl *FixedWindowRateLimiter) Allow(pass bool, count int, seriveStat bool) I
 
 	used := rl.count
 
-	if used+count < rl.limit[seriveStat] {
+	if used+count < rl.limit {
 		if pass {
-			return IsAllow{true, used, rl.limit[seriveStat], rl.window2}
+			return IsAllow{true, used, rl.limit, rl.window2}
 		}
 		// 增加计数
 		rl.count += count
-		return IsAllow{true, used + count, rl.limit[seriveStat], rl.window2}
+		return IsAllow{true, used + count, rl.limit, rl.window2}
 	}
 
-	return IsAllow{false, used, rl.limit[seriveStat], rl.window2}
+	return IsAllow{false, used, rl.limit, rl.window2}
 }
 
 type IPBasedRateLimiter struct {
 	mu       sync.Mutex
 	limiters map[string]*FixedWindowRateLimiter // 修改为 FixedWindowRateLimiter
-	limit    lhLimit
+	limit    int
 	window   time.Duration
 	window2  string
 }
 
 type IPBasedRateLimiters []*IPBasedRateLimiter
 
-func NewIPBasedRateLimiter(_lhLimit lhLimit, window time.Duration, window2 string) *IPBasedRateLimiter {
+func NewIPBasedRateLimiter(limit int, window time.Duration, window2 string) *IPBasedRateLimiter {
 	return &IPBasedRateLimiter{
 		limiters: make(map[string]*FixedWindowRateLimiter),
-		limit:    _lhLimit,
+		limit:    limit,
 		window:   window,
 		window2:  window2,
 	}
 }
 
-func (iprl *IPBasedRateLimiter) Allow(ip string, pass bool, count int, seriveStat bool) IsAllow {
+func (iprl *IPBasedRateLimiter) Allow(ip string, pass bool, count int) IsAllow {
 	iprl.mu.Lock()
 	defer iprl.mu.Unlock()
 
@@ -106,7 +103,7 @@ func (iprl *IPBasedRateLimiter) Allow(ip string, pass bool, count int, seriveSta
 		iprl.limiters[ip] = limiter
 	}
 
-	return limiter.Allow(pass, count, seriveStat)
+	return limiter.Allow(pass, count)
 }
 
 func (iprl *IPBasedRateLimiter) allowPassCheck(ip string) {

@@ -3,21 +3,17 @@ module github.com/48Club/service_agent
 go 1.23.0
 
 require (
-	github.com/48Club/ip-waf-helper v0.0.0-20240820160631-122af2ffde8c
 	github.com/deckarep/golang-set/v2 v2.7.0
 	github.com/ethereum/go-ethereum v1.14.13
 	github.com/gin-contrib/cors v1.7.2
 	github.com/gin-gonic/gin v1.10.0
-	github.com/go-sql-driver/mysql v1.8.1
 	github.com/gorilla/websocket v1.5.3
 	github.com/redis/go-redis/v9 v9.7.0
 	github.com/stretchr/testify v1.9.0
-	gorm.io/driver/mysql v1.5.7
 	gorm.io/gorm v1.25.12
 )
 
 require (
-	filippo.io/edwards25519 v1.1.0 // indirect
 	github.com/Microsoft/go-winio v0.6.2 // indirect
 	github.com/StackExchange/wmi v1.2.1 // indirect
 	github.com/bits-and-blooms/bitset v1.15.0 // indirect
