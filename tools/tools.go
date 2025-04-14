@@ -37,6 +37,7 @@ func CheckJOSNType(body []byte) byte {
 var BadBatchRequest = errors.New("bad batch request")
 
 func DecodeRequestBody(host string, body []byte) (resp gin.H, buildRespByAgent bool, batchCount int) {
+	batchCount = 1
 	switch CheckJOSNType(body) {
 	case 123: // {
 		var web3Req types.Web3ClientRequest
@@ -53,7 +54,7 @@ func DecodeRequestBody(host string, body []byte) (resp gin.H, buildRespByAgent b
 			_tmp, buildRespByAgent = decodeEthCall(web3Req.Params)
 		}
 		if buildRespByAgent {
-			resp = buildGethResponse(host, web3Req, _tmp)
+			resp = buildGethResponse(web3Req, _tmp)
 		}
 	case 91: // [
 		var web3Reqs types.Web3ClientRequests
@@ -74,7 +75,7 @@ func set1weiGasPrice(h string) (string, bool) {
 	return "", false
 }
 
-func buildGethResponse(host string, i types.Web3ClientRequest, result string) gin.H {
+func buildGethResponse(i types.Web3ClientRequest, result string) gin.H {
 	return gin.H{
 		"jsonrpc": i.JsonRPC,
 		"id":      i.Id,
@@ -101,9 +102,3 @@ func decodeEthCall(p []interface{}) (s string, b bool) {
 	}
 	return "0x30", true
 }
-
-const (
-	ethGasPrice       = "0x3b9aca00"
-	web3ClientVersion = "Geth/v1.4.15-ec318b9c-20240919/linux-amd64/go1.22.7/48Club"
-	ethChainId        = "0x38"
-)

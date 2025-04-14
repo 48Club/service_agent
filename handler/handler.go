@@ -20,7 +20,7 @@ import (
 )
 
 var (
-	normalRequestStatus = mapset.NewSet[int](http.StatusOK, http.StatusNoContent, http.StatusTooManyRequests, http.StatusUnprocessableEntity)
+	normalRequestStatus = mapset.NewSet(http.StatusOK, http.StatusNoContent, http.StatusTooManyRequests, http.StatusUnprocessableEntity)
 )
 
 func CustomLoggerMiddleware(c *gin.Context) {
