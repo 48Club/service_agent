@@ -1,19 +1,32 @@
 package limit
 
 import (
-	"encoding/json"
 	"fmt"
 	"sync"
 	"time"
 
-	"github.com/48Club/service_agent/redis"
-	redis9 "github.com/redis/go-redis/v9"
+	"github.com/48Club/service_agent/types"
 )
 
 var (
-	Limits  IPBasedRateLimiters
-	redisDB = redis.New(0)
+	Limits IPBasedRateLimiters
 )
+
+func (_limits IPBasedRateLimiters) Allow(ip string, pass bool, count int, res *types.LimitResponse) (tonanyRequests bool) {
+	for _, limit := range _limits {
+		limiter := limit.Allow(ip, pass, count)
+
+		if res != nil {
+			res.Limit = append(res.Limit, fmt.Sprintf("%d/%s", limiter.Limit, limiter.Wind))
+			res.Remaining = append(res.Remaining, fmt.Sprintf("%d/%s", limiter.Limit-limiter.Used, limiter.Wind))
+		}
+		if !limiter.Allow {
+			tonanyRequests = true
+		}
+	}
+
+	return
+}
 
 func (iprls IPBasedRateLimiters) Prune(ip string) {
 	for _, rl := range iprls {
@@ -25,8 +38,8 @@ func (iprls IPBasedRateLimiters) Prune(ip string) {
 
 func init() {
 	Limits = IPBasedRateLimiters{
-		NewIPBasedRateLimiter(80, time.Second*5, "5s"), // [9.6|16]qps
-		NewIPBasedRateLimiter(720, time.Minute, "1m"),  // [7.2|12]qps
+		NewIPBasedRateLimiter(80, time.Second*5), // [9.6|16]qps
+		NewIPBasedRateLimiter(720, time.Minute),  // [7.2|12]qps
 	}
 }
 
@@ -84,12 +97,12 @@ type IPBasedRateLimiter struct {
 
 type IPBasedRateLimiters []*IPBasedRateLimiter
 
-func NewIPBasedRateLimiter(limit int, window time.Duration, window2 string) *IPBasedRateLimiter {
+func NewIPBasedRateLimiter(limit int, window time.Duration) *IPBasedRateLimiter {
 	return &IPBasedRateLimiter{
 		limiters: make(map[string]*FixedWindowRateLimiter),
 		limit:    limit,
 		window:   window,
-		window2:  window2,
+		window2:  window.String(),
 	}
 }
 
@@ -129,69 +142,4 @@ type IsAllow struct {
 	Used  int
 	Limit int
 	Wind  string
-}
-
-// 修改 redisSave 结构
-type redisSave struct {
-	IP        string `json:"ip"`
-	LastReset int64  `json:"lastReset"` // 窗口重置时间（Unix 时间戳）
-	Count     int    `json:"count"`     // 当前窗口计数
-}
-
-func (iprls IPBasedRateLimiters) SaveCache() error {
-	for _, iprl := range iprls {
-		iprl.mu.Lock()
-		defer iprl.mu.Unlock()
-		var redisSaves = []redisSave{}
-		for ip, rl := range iprl.limiters {
-			rl.mu.Lock()
-			redisSaves = append(redisSaves, redisSave{
-				IP:        ip,
-				LastReset: rl.lastReset.Unix(),
-				Count:     rl.count,
-			})
-			rl.mu.Unlock()
-		}
-
-		b, err := json.Marshal(redisSaves)
-		if err != nil {
-			return err
-		}
-		if err := redisDB.SaveCache(fmt.Sprintf("rl_%s", iprl.window2), string(b), iprl.window); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func (iprls IPBasedRateLimiters) LoadFromCache() error {
-	for _, iprl := range iprls {
-		key := fmt.Sprintf("rl_%s", iprl.window2)
-		b, err := redisDB.GetCache(key)
-		if err != nil {
-			if err == redis9.Nil {
-				continue
-			}
-			return err
-		}
-		var redisSaves = []redisSave{}
-		if err := json.Unmarshal([]byte(b), &redisSaves); err != nil {
-			return err
-		}
-		for _, _redisSave := range redisSaves {
-			rl := NewFixedWindowRateLimiter(iprl.limit, iprl.window, iprl.window2)
-			rl.lastReset = time.Unix(_redisSave.LastReset, 0)
-			rl.count = _redisSave.Count
-			// 检查窗口是否过期
-			if time.Since(rl.lastReset) >= rl.window {
-				rl.count = 0
-				rl.lastReset = time.Now()
-			}
-			iprl.mu.Lock()
-			iprl.limiters[_redisSave.IP] = rl
-			iprl.mu.Unlock()
-		}
-		_ = redisDB.Del(key)
-	}
-	return nil
 }

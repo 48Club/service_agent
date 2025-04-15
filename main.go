@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/48Club/service_agent/handler"
-	"github.com/48Club/service_agent/limit"
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 )
@@ -26,7 +25,7 @@ func main() {
 			AllowMethods: []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
 			AllowHeaders: []string{"Accept", "Authorization", "Cache-Control", "Content-Type", "DNT", "If-Modified-Since", "Keep-Alive", "Origin", "User-Agent", "X-Requested-With"},
 		},
-	), handler.SetMaxRequestBodySize, handler.LimitMiddleware, handler.CustomRecoveryMiddleware)
+	), handler.CheckHeader, handler.SetMaxRequestBodySize, handler.LimitMiddleware, handler.CustomRecoveryMiddleware)
 
 	r.NoRoute(handler.AnyHandler)
 	r.NoMethod(handler.AnyHandler)
@@ -55,16 +54,5 @@ func main() {
 		log.Printf("server shutdown failed:%+v", err)
 	}
 
-	if err := limit.Limits.SaveCache(); err != nil {
-		log.Fatalf("save to cache failed:%+v", err)
-	}
-
 	log.Print("server exited properly")
-}
-
-func init() {
-	if err := limit.Limits.LoadFromCache(); err != nil {
-		log.Fatalf("load from redis failed:%+v", err)
-	}
-
 }

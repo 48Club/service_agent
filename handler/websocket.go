@@ -67,7 +67,7 @@ func handleWebSocket(c *gin.Context, toHost string) {
 					return
 				}
 
-				if LimitMiddleware2(ip, true, 1, nil) {
+				if LimitMiddleware2(ip, true, 1, nil, host) {
 					_ = conn.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.ClosePolicyViolation, "Too many requests"))
 					return
 				}
@@ -76,7 +76,7 @@ func handleWebSocket(c *gin.Context, toHost string) {
 				if messageType == websocket.TextMessage {
 					resp, buildRespByAgent, batchCount := tools.DecodeRequestBody(host, message)
 
-					if addLimitBatchReq(ip, batchCount) {
+					if addLimitBatchReq(ip, batchCount, host) {
 						// 429 Too Many Requests
 						_ = conn.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.ClosePolicyViolation, "Too many requests"))
 						return

@@ -60,6 +60,15 @@ func CustomLoggerMiddleware(c *gin.Context) {
 	c.Next()
 }
 
+func CheckHeader(c *gin.Context) {
+	if exceptionLimiter, ok := config.GlobalConfig.ExceptionLimiterMap[c.Request.Host]; ok {
+		if c.GetHeader("X-48-Token") != exceptionLimiter.XToken {
+			c.AbortWithStatus(http.StatusForbidden)
+			return
+		}
+	}
+}
+
 func CustomRecoveryMiddleware(c *gin.Context) {
 	defer func() {
 		if r := recover(); r != nil {
@@ -110,7 +119,7 @@ func LimitMiddleware(c *gin.Context) {
 	}
 
 	var limitHeader = types.LimitResponse{}
-	tooManyRequests := LimitMiddleware2(userIP, true, 1, &limitHeader)
+	tooManyRequests := LimitMiddleware2(userIP, true, 1, &limitHeader, c.Request.Host)
 
 	limitHeader.AddHeader(c)
 
@@ -121,24 +130,19 @@ func LimitMiddleware(c *gin.Context) {
 		c.AbortWithStatus(http.StatusTooManyRequests)
 		return
 	}
+	if exceptionLimiter, ok := config.GlobalConfig.ExceptionLimiterMap[c.Request.Host]; ok {
+		exceptionLimiter.Limter.AllowPassCheck(userIP)
+	} else {
+		limit.Limits.AllowPassCheck(userIP)
+	}
 
 }
 
-func LimitMiddleware2(ip string, pass bool, count int, res *types.LimitResponse) bool {
-	tooManyRequests := false
-
-	for _, limit := range limit.Limits {
-		limiter := limit.Allow(ip, pass, count)
-		if res != nil {
-			res.Limit = append(res.Limit, fmt.Sprintf("%d/%s", limiter.Limit, limiter.Wind))
-			res.Remaining = append(res.Remaining, fmt.Sprintf("%d/%s", limiter.Limit-limiter.Used, limiter.Wind))
-		}
-		if !limiter.Allow {
-			tooManyRequests = true
-		}
+func LimitMiddleware2(ip string, pass bool, count int, res *types.LimitResponse, h string) bool {
+	if exceptionLimiter, ok := config.GlobalConfig.ExceptionLimiterMap[h]; ok {
+		return exceptionLimiter.Limter.Allow(ip, pass, count, res)
 	}
-
-	return tooManyRequests
+	return limit.Limits.Allow(ip, pass, count, res)
 }
 
 func AnyHandler(c *gin.Context) {
@@ -168,21 +172,22 @@ func AnyHandler(c *gin.Context) {
 	}
 }
 
-func addLimitBatchReq(ip string, reqCount int) bool {
+func addLimitBatchReq(ip string, reqCount int, h string) bool {
 	if reqCount == 1 {
 		return false
 	}
+
 	reqCount = 2*reqCount - 1
-	if reqCount > config.GlobalConfig.MaxBatchQuery {
+	if _, ok := config.GlobalConfig.ExceptionLimiterMap[h]; !ok && reqCount > config.GlobalConfig.MaxBatchQuery {
 		return true
 	}
-	return LimitMiddleware2(ip, false, reqCount, nil)
+	return LimitMiddleware2(ip, false, reqCount, nil, h)
 }
 
 func rpcHandler(c *gin.Context, body []byte) {
 	resp, buildRespByAgent, batchCount := tools.DecodeRequestBody(c.Request.Host, body)
 
-	if addLimitBatchReq(c.GetString("ip"), batchCount) {
+	if addLimitBatchReq(c.GetString("ip"), batchCount, c.Request.Host) {
 		c.AbortWithStatus(http.StatusTooManyRequests)
 		return
 	}
