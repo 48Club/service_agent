@@ -6,7 +6,6 @@ import (
 	"net/http"
 	"sync"
 
-	"github.com/48Club/service_agent/limit"
 	"github.com/48Club/service_agent/tools"
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
@@ -66,12 +65,12 @@ func handleWebSocket(c *gin.Context, toHost string) {
 					log.Println("Read error from client:", err)
 					return
 				}
-
-				if LimitMiddleware2(ip, true, 1, nil, host) {
+				tooManyRequests, AllowPassCheck := LimitMiddleware2(ip, true, 1, nil, host)
+				if tooManyRequests {
 					_ = conn.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.ClosePolicyViolation, "Too many requests"))
 					return
 				}
-				limit.Limits.AllowPassCheck(ip)
+				AllowPassCheck(ip)
 
 				if messageType == websocket.TextMessage {
 					resp, buildRespByAgent, batchCount := tools.DecodeRequestBody(host, message)

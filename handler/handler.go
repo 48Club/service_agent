@@ -119,7 +119,7 @@ func LimitMiddleware(c *gin.Context) {
 	}
 
 	var limitHeader = types.LimitResponse{}
-	tooManyRequests := LimitMiddleware2(userIP, true, 1, &limitHeader, c.Request.Host)
+	tooManyRequests, AllowPassCheck := LimitMiddleware2(userIP, true, 1, &limitHeader, c.Request.Host)
 
 	limitHeader.AddHeader(c)
 
@@ -130,19 +130,15 @@ func LimitMiddleware(c *gin.Context) {
 		c.AbortWithStatus(http.StatusTooManyRequests)
 		return
 	}
-	if exceptionLimiter, ok := config.GlobalConfig.ExceptionLimiterMap[c.Request.Host]; ok {
-		exceptionLimiter.Limter.AllowPassCheck(userIP)
-	} else {
-		limit.Limits.AllowPassCheck(userIP)
-	}
 
+	AllowPassCheck(userIP)
 }
 
-func LimitMiddleware2(ip string, pass bool, count int, res *types.LimitResponse, h string) bool {
+func LimitMiddleware2(ip string, pass bool, count int, res *types.LimitResponse, h string) (bool, func(string)) {
 	if exceptionLimiter, ok := config.GlobalConfig.ExceptionLimiterMap[h]; ok {
-		return exceptionLimiter.Limter.Allow(ip, pass, count, res)
+		return exceptionLimiter.Limter.Allow(ip, pass, count, res), exceptionLimiter.Limter.AllowPassCheck
 	}
-	return limit.Limits.Allow(ip, pass, count, res)
+	return limit.Limits.Allow(ip, pass, count, res), limit.Limits.AllowPassCheck
 }
 
 func AnyHandler(c *gin.Context) {
@@ -181,7 +177,8 @@ func addLimitBatchReq(ip string, reqCount int, h string) bool {
 	if _, ok := config.GlobalConfig.ExceptionLimiterMap[h]; !ok && reqCount > config.GlobalConfig.MaxBatchQuery {
 		return true
 	}
-	return LimitMiddleware2(ip, false, reqCount, nil, h)
+	b, _ := LimitMiddleware2(ip, false, reqCount, nil, h)
+	return b
 }
 
 func rpcHandler(c *gin.Context, body []byte) {
