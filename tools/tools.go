@@ -1,9 +1,11 @@
 package tools
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"math/big"
+	"net/http"
 	"strings"
 
 	"github.com/48Club/service_agent/types"
@@ -34,6 +36,35 @@ func CheckJOSNType(body []byte) byte {
 	return 0
 }
 
+func simpleStats(h string, reqs types.Web3ClientRequests) {
+	if len(reqs) == 0 {
+		return
+	}
+
+	type tMethod struct {
+		Method string `json:"method"`
+	}
+	type tBody struct {
+		H string    `json:"h"`
+		M []tMethod `json:"m"`
+	}
+	reqBody := tBody{
+		H: h,
+		M: []tMethod{},
+	}
+
+	for _, v := range reqs {
+		reqBody.M = append(reqBody.M, tMethod{v.Method})
+	}
+
+	b, err := json.Marshal(reqBody)
+	if err != nil {
+		return
+	}
+
+	_, _ = http.Post("http://192.168.0.101:1000/stats", "application/json", bytes.NewReader(b))
+}
+
 var BadBatchRequest = errors.New("bad batch request")
 
 func DecodeRequestBody(host string, body []byte) (resp gin.H, buildRespByAgent bool, batchCount int) {
@@ -45,6 +76,7 @@ func DecodeRequestBody(host string, body []byte) (resp gin.H, buildRespByAgent b
 		if err != nil {
 			return
 		}
+		go simpleStats(host, web3Req.Conv2Batch())
 
 		var _tmp string
 		switch web3Req.Method {
@@ -62,6 +94,8 @@ func DecodeRequestBody(host string, body []byte) (resp gin.H, buildRespByAgent b
 		if err != nil {
 			return
 		}
+		go simpleStats(host, web3Reqs)
+
 		batchCount = len(web3Reqs)
 	}
 

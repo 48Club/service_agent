@@ -13,6 +13,8 @@ type Web3ClientRequest struct {
 	Params  []interface{} `json:"params"`
 }
 
+func (w Web3ClientRequest) Conv2Batch() Web3ClientRequests { return Web3ClientRequests{w} }
+
 type Web3ClientRequests []Web3ClientRequest
 
 type LimitResponse struct {
