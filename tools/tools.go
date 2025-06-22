@@ -28,8 +28,8 @@ func GetRpcStatus() int {
 	if err != nil {
 		return http.StatusInternalServerError
 	}
-	// 区块不是 3 秒内的, 认为 RPC 不可用
-	if time.Since(time.Unix(int64(block.Time), 0)) > 3*time.Second {
+	// 区块不是 20 秒内的, 认为 RPC 不可用
+	if time.Since(time.Unix(int64(block.Time), 0)) > 20*time.Second {
 		return http.StatusInternalServerError
 	}
 
