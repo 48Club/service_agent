@@ -7,6 +7,7 @@ import (
 	"math/big"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/48Club/service_agent/config"
 	"github.com/48Club/service_agent/types"
@@ -23,8 +24,12 @@ func GetRpcStatus() int {
 	}
 	defer ec.Close()
 
-	block, err := ec.BlockNumber(context.Background())
-	if err != nil || block == 0 {
+	block, err := ec.HeaderByNumber(context.Background(), nil)
+	if err != nil {
+		return http.StatusInternalServerError
+	}
+	// 区块不是 3 秒内的, 认为 RPC 不可用
+	if time.Since(time.Unix(int64(block.Time), 0)) > 3*time.Second {
 		return http.StatusInternalServerError
 	}
 
