@@ -154,7 +154,8 @@ func AnyHandler(c *gin.Context) {
 	case http.MethodHead:
 		fallthrough
 	case http.MethodOptions:
-		c.AbortWithStatus(http.StatusNoContent)
+		// Header requests, check rpc status
+		c.AbortWithStatus(tools.GetRpcStatus())
 	case http.MethodPost:
 		rpcHandler(c, body)
 	case http.MethodGet:

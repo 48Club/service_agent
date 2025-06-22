@@ -1,16 +1,35 @@
 package tools
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"math/big"
+	"net/http"
 	"strings"
 
+	"github.com/48Club/service_agent/config"
 	"github.com/48Club/service_agent/types"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
+	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/gin-gonic/gin"
 )
+
+func GetRpcStatus() int {
+	ec, err := ethclient.Dial(config.GlobalConfig.Sentry)
+	if err != nil {
+		return http.StatusInternalServerError
+	}
+	defer ec.Close()
+
+	block, err := ec.BlockNumber(context.Background())
+	if err != nil || block == 0 {
+		return http.StatusInternalServerError
+	}
+
+	return http.StatusNoContent
+}
 
 func IsRpc(host string, d map[string]struct{}) bool {
 	_, ok := d[host]
