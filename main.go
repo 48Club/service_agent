@@ -9,6 +9,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/48Club/service_agent/config"
 	"github.com/48Club/service_agent/handler"
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
@@ -18,6 +19,9 @@ func main() {
 	r := gin.New()
 	r.Use(handler.CustomLoggerMiddleware, gin.Recovery())
 	r.TrustedPlatform = gin.PlatformCloudflare
+	if config.GlobalConfig.CDNPlatforms != "" {
+		r.TrustedPlatform = config.GlobalConfig.CDNPlatforms
+	}
 
 	r.Use(cors.New(
 		cors.Config{

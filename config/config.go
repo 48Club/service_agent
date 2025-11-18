@@ -9,7 +9,8 @@ import (
 )
 
 type Config struct {
-	Sentry              string                       `json:"sentry"`  // 哨兵节点
+	Sentry              string                       `json:"sentry"` // 哨兵节点
+	CDNPlatforms        string                       `json:"cdn_platforms"`
 	DomainsHelper       []string                     `json:"domains"` // 域名列表
 	Domains             map[string]struct{}          `json:"-"`       // 域名列表, 用于快速查找
 	ExceptionLimiter    []exceptionLimiter           `json:"exception_limiter"`
