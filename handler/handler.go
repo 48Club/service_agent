@@ -142,7 +142,10 @@ func LimitMiddleware2(ip string, pass bool, count int, res *types.LimitResponse,
 }
 
 func AnyHandler(c *gin.Context) {
-	c.Set("isRpc", tools.IsRpc(c.Request.Host, config.GlobalConfig.Domains))
+	if !tools.IsRpc(c.Request.Host, config.GlobalConfig.Domains) {
+		c.AbortWithStatus(http.StatusForbidden)
+		return
+	}
 
 	var body = []byte{}
 	if c.Request.ContentLength != 0 {
@@ -159,7 +162,6 @@ func AnyHandler(c *gin.Context) {
 	case http.MethodPost:
 		rpcHandler(c, body)
 	case http.MethodGet:
-
 		if c.Request.URL.Path == "/ws/" && c.IsWebsocket() {
 			handleWebSocket(c, fmt.Sprintf("ws://%s", strings.Split(config.GlobalConfig.Sentry, "://")[1]))
 		}

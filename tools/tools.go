@@ -41,8 +41,8 @@ func IsRpc(host string, d map[string]struct{}) bool {
 	if ok {
 		return true
 	}
-	// 判断 域名后缀是否包含 .rpc.48.club
-	if strings.HasSuffix(host, ".rpc.48.club") {
+	// 判断 域名后缀是否包含 .48.club
+	if strings.HasSuffix(host, ".48.club") {
 		return true
 	}
 	return false
