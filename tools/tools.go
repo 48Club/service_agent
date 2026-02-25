@@ -38,15 +38,8 @@ func GetRpcStatus() int {
 
 func IsRpc(host string, d map[string]struct{}) bool {
 	_, ok := d[host]
-	if ok {
-		return true
-	}
 	// 判断 域名后缀是否包含 .48.club 或 .bsc-rpc.com
-	if strings.HasSuffix(host, ".48.club") || strings.HasSuffix(host, ".bsc-rpc.com") {
-		return true
-	}
-	return false
-
+	return ok || strings.HasSuffix(host, ".48.club") || strings.HasSuffix(host, ".bsc-rpc.com")
 }
 
 func CheckJOSNType(body []byte) byte {
