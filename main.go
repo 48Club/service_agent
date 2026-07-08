@@ -29,7 +29,7 @@ func main() {
 			AllowMethods: []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
 			AllowHeaders: []string{"Accept", "Authorization", "Cache-Control", "Content-Type", "DNT", "If-Modified-Since", "Keep-Alive", "Origin", "User-Agent", "X-Requested-With"},
 		},
-	), handler.CheckHeader, handler.SetMaxRequestBodySize, handler.LimitMiddleware, handler.CustomRecoveryMiddleware)
+	), handler.CheckHeader, handler.SetMaxRequestBodySize, handler.CheckIPMiddleware, handler.CustomRecoveryMiddleware)
 
 	r.NoRoute(handler.AnyHandler)
 	r.NoMethod(handler.AnyHandler)

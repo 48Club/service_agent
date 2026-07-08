@@ -65,20 +65,24 @@ func handleWebSocket(c *gin.Context, toHost string) {
 					log.Println("Read error from client:", err)
 					return
 				}
-				tooManyRequests, AllowPassCheck := LimitMiddleware2(ip, true, 1, nil, host)
+				tooManyRequests, _ := LimitMiddleware(ip, true, 1, nil, host)
 				if tooManyRequests {
 					_ = conn.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.ClosePolicyViolation, "Too many requests"))
 					return
 				}
-				AllowPassCheck(ip)
 
 				if messageType == websocket.TextMessage {
-					resp, buildRespByAgent, batchCount := tools.DecodeRequestBody(host, message)
+					resp, buildRespByAgent, batchCount, sikpLimit := tools.DecodeRequestBody(host, message)
 
-					if addLimitBatchReq(ip, batchCount, host) {
-						// 429 Too Many Requests
-						_ = conn.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.ClosePolicyViolation, "Too many requests"))
-						return
+					if !sikpLimit {
+						// 统计限速
+						if batchCount > 0 {
+							// 统计批量请求中非 eth_sendRawTransaction 的请求数量
+							if addLimitBatchReq(ip, batchCount, host) {
+								_ = conn.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.ClosePolicyViolation, "Too many requests"))
+								return
+							}
+						}
 					}
 
 					if buildRespByAgent {

@@ -82,7 +82,11 @@ func CheckJOSNType(body []byte) byte {
 
 var BadBatchRequest = errors.New("bad batch request")
 
-func DecodeRequestBody(host string, body []byte) (resp gin.H, buildRespByAgent bool, batchCount int) {
+// buildRespByAgent: 是否需要由 agent 构建响应
+// resp: 由 agent 构建的响应
+// batchCount: 批量请求中非 eth_sendRawTransaction 的请求数量
+// sikpLimit: 是否跳过限制器
+func DecodeRequestBody(host string, body []byte) (resp gin.H, buildRespByAgent bool, batchCount int, skipLimit bool) {
 	batchCount = 1
 	switch CheckJOSNType(body) {
 	case 123: // {
@@ -95,6 +99,9 @@ func DecodeRequestBody(host string, body []byte) (resp gin.H, buildRespByAgent b
 
 		var _tmp string
 		switch web3Req.Method {
+		case "eth_sendRawTransaction":
+			skipLimit = true
+			return
 		case "eth_gasPrice":
 			_tmp, buildRespByAgent = set1weiGasPrice(host)
 		case "eth_call":
@@ -111,7 +118,21 @@ func DecodeRequestBody(host string, body []byte) (resp gin.H, buildRespByAgent b
 		}
 		// go simpleStats(host, web3Reqs)
 
-		batchCount = len(web3Reqs)
+		reqCount := len(web3Reqs)
+		txCount := 0
+
+		for _, v := range web3Reqs {
+			if v.Method == "eth_sendRawTransaction" {
+				txCount++
+			}
+		}
+
+		if txCount == reqCount {
+			skipLimit = true
+			return
+		}
+
+		batchCount = reqCount - txCount
 	}
 
 	return

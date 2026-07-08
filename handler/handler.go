@@ -105,7 +105,7 @@ func SetMaxRequestBodySize(c *gin.Context) {
 	c.Request.Body = io.NopCloser(bytes.NewReader(body))
 }
 
-func LimitMiddleware(c *gin.Context) {
+func CheckIPMiddleware(c *gin.Context) {
 	userIP, fromCDN := tools.CheckGinIP(c)
 	if !fromCDN && config.GlobalConfig.CDNPlatforms == "" {
 		c.AbortWithStatus(http.StatusForbidden)
@@ -119,7 +119,7 @@ func LimitMiddleware(c *gin.Context) {
 	}
 
 	var limitHeader = types.LimitResponse{}
-	tooManyRequests, AllowPassCheck := LimitMiddleware2(userIP, true, 1, &limitHeader, c.Request.Host)
+	tooManyRequests, _ := LimitMiddleware(userIP, true, 1, &limitHeader, c.Request.Host)
 
 	limitHeader.AddHeader(c)
 
@@ -130,12 +130,10 @@ func LimitMiddleware(c *gin.Context) {
 		c.AbortWithStatus(http.StatusTooManyRequests)
 		return
 	}
-
-	AllowPassCheck(userIP)
 }
 
-func LimitMiddleware2(ip string, pass bool, count int, res *types.LimitResponse, h string) (bool, func(string)) {
-	if exceptionLimiter, ok := config.GlobalConfig.ExceptionLimiterMap[h]; ok {
+func LimitMiddleware(ip string, pass bool, count int, res *types.LimitResponse, hostname string) (bool, func(string)) {
+	if exceptionLimiter, ok := config.GlobalConfig.ExceptionLimiterMap[hostname]; ok {
 		return exceptionLimiter.Limter.Allow(ip, pass, count, res), exceptionLimiter.Limter.AllowPassCheck
 	}
 	return limit.Limits.Allow(ip, pass, count, res), limit.Limits.AllowPassCheck
@@ -172,24 +170,24 @@ func AnyHandler(c *gin.Context) {
 }
 
 func addLimitBatchReq(ip string, reqCount int, h string) bool {
-	if reqCount == 1 {
-		return false
-	}
-
-	reqCount = 2*reqCount - 1
 	if _, ok := config.GlobalConfig.ExceptionLimiterMap[h]; !ok && reqCount > config.GlobalConfig.MaxBatchQuery {
 		return true
 	}
-	b, _ := LimitMiddleware2(ip, false, reqCount, nil, h)
+	b, _ := LimitMiddleware(ip, false, reqCount, nil, h)
 	return b
 }
 
 func rpcHandler(c *gin.Context, body []byte) {
-	resp, buildRespByAgent, batchCount := tools.DecodeRequestBody(c.Request.Host, body)
-
-	if addLimitBatchReq(c.GetString("ip"), batchCount, c.Request.Host) {
-		c.AbortWithStatus(http.StatusTooManyRequests)
-		return
+	resp, buildRespByAgent, batchCount, skipLimit := tools.DecodeRequestBody(c.Request.Host, body)
+	if !skipLimit {
+		// 统计限速
+		if batchCount > 0 {
+			// 统计批量请求中非 eth_sendRawTransaction 的请求数量
+			if addLimitBatchReq(c.GetString("ip"), batchCount, c.Request.Host) {
+				c.AbortWithStatus(http.StatusTooManyRequests)
+				return
+			}
+		}
 	}
 	if buildRespByAgent {
 		c.JSON(http.StatusOK, resp)
