@@ -21,7 +21,7 @@ func TestXxx(t *testing.T) {
 	var w3 types.Web3ClientRequest
 	err := json.Unmarshal([]byte(s), &w3)
 	assert.Nil(t, err)
-	var resp interface{} = 123
+	var resp any = 123
 	// assert.True(t, decodeEthCall(&resp, w3.Method, false, w3.Params))
 	assert.Equal(t, "0x30", resp)
 }

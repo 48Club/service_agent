@@ -28,7 +28,7 @@ func testfunc3(db *gorm.DB, host string) []string {
 }
 
 func TestInterface2Func(t *testing.T) {
-	var is []interface{} = []interface{}{testfunc1, testfunc2, testfunc3}
+	var is []any = []any{testfunc1, testfunc2, testfunc3}
 	for index, i := range is {
 		switch x := i.(type) {
 		case (func(*gorm.DB, string) int64):

@@ -133,11 +133,11 @@ func buildGethResponse(i types.Web3ClientRequest, result string) gin.H {
 }
 
 // 如果用户请求特定的方法，我们可以直接返回 0x30 作为响应
-func decodeEthCall(p []interface{}) (s string, b bool) {
+func decodeEthCall(p []any) (s string, b bool) {
 	if len(p) > 2 {
 		return
 	}
-	v, ok := p[0].(map[string]interface{})
+	v, ok := p[0].(map[string]any)
 	if !ok {
 		return
 	}

@@ -7,10 +7,10 @@ import (
 )
 
 type Web3ClientRequest struct {
-	JsonRPC string        `json:"jsonrpc"`
-	Id      interface{}   `json:"id"`
-	Method  string        `json:"method"`
-	Params  []interface{} `json:"params"`
+	JsonRPC string `json:"jsonrpc"`
+	Id      any    `json:"id"`
+	Method  string `json:"method"`
+	Params  []any  `json:"params"`
 }
 
 func (w Web3ClientRequest) Conv2Batch() Web3ClientRequests { return Web3ClientRequests{w} }
