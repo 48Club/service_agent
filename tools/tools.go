@@ -11,6 +11,7 @@ import (
 
 	"github.com/48Club/service_agent/config"
 	"github.com/48Club/service_agent/types"
+	mapset "github.com/deckarep/golang-set/v2"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/ethclient"
@@ -36,10 +37,9 @@ func GetRpcStatus() int {
 	return http.StatusNoContent
 }
 
-func IsRpc(host string, d map[string]struct{}) bool {
-	_, ok := d[host]
+func IsRpc(host string, d mapset.Set[string]) bool {
 	// 判断 域名后缀是否包含 .48.club 或 .bsc-rpc.com
-	return ok || strings.HasSuffix(host, ".48.club") || strings.HasSuffix(host, ".bsc-rpc.com")
+	return d.ContainsOne(host) || strings.HasSuffix(host, ".48.club") || strings.HasSuffix(host, ".bsc-rpc.com")
 }
 
 func CheckJOSNType(body []byte) byte {
@@ -50,35 +50,6 @@ func CheckJOSNType(body []byte) byte {
 	}
 	return 0
 }
-
-// func simpleStats(h string, reqs types.Web3ClientRequests) {
-// 	if len(reqs) == 0 {
-// 		return
-// 	}
-
-// 	type tMethod struct {
-// 		Method string `json:"method"`
-// 	}
-// 	type tBody struct {
-// 		H string    `json:"h"`
-// 		M []tMethod `json:"m"`
-// 	}
-// 	reqBody := tBody{
-// 		H: h,
-// 		M: []tMethod{},
-// 	}
-
-// 	for _, v := range reqs {
-// 		reqBody.M = append(reqBody.M, tMethod{v.Method})
-// 	}
-
-// 	b, err := json.Marshal(reqBody)
-// 	if err != nil {
-// 		return
-// 	}
-
-// 	_, _ = http.Post("http://192.168.0.101:1000/stats", "application/json", bytes.NewReader(b))
-// }
 
 var BadBatchRequest = errors.New("bad batch request")
 
@@ -95,13 +66,14 @@ func DecodeRequestBody(host string, body []byte) (resp gin.H, buildRespByAgent b
 		if err != nil {
 			return
 		}
-		// go simpleStats(host, web3Req.Conv2Batch())
+
+		if config.GlobalConfig.SkipLimitMethods.ContainsOne(web3Req.Method) {
+			skipLimit = true
+			return
+		}
 
 		var _tmp string
 		switch web3Req.Method {
-		case "eth_sendRawTransaction":
-			skipLimit = true
-			return
 		case "eth_gasPrice":
 			_tmp, buildRespByAgent = set1weiGasPrice(host)
 		case "eth_call":
@@ -116,13 +88,12 @@ func DecodeRequestBody(host string, body []byte) (resp gin.H, buildRespByAgent b
 		if err != nil {
 			return
 		}
-		// go simpleStats(host, web3Reqs)
 
 		reqCount := len(web3Reqs)
 		txCount := 0
 
 		for _, v := range web3Reqs {
-			if v.Method == "eth_sendRawTransaction" {
+			if config.GlobalConfig.SkipLimitMethods.ContainsOne(v.Method) {
 				txCount++
 			}
 		}

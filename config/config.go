@@ -6,16 +6,19 @@ import (
 	"time"
 
 	"github.com/48Club/service_agent/limit"
+	mapset "github.com/deckarep/golang-set/v2"
 )
 
 type Config struct {
-	Sentry              string                       `json:"sentry"` // 哨兵节点
-	CDNPlatforms        string                       `json:"cdn_platforms"`
-	DomainsHelper       []string                     `json:"domains"` // 域名列表
-	Domains             map[string]struct{}          `json:"-"`       // 域名列表, 用于快速查找
-	ExceptionLimiter    []exceptionLimiter           `json:"exception_limiter"`
-	ExceptionLimiterMap map[string]*exceptionLimiter `json:"-"` // 异常限制器, 用于快速查找
-	MaxBatchQuery       int                          `json:"max_batch_query"`
+	Sentry                 string                       `json:"sentry"` // 哨兵节点
+	CDNPlatforms           string                       `json:"cdn_platforms"`
+	DomainsHelper          []string                     `json:"domains"` // 域名列表
+	Domains                mapset.Set[string]           `json:"-"`       // 域名列表, 用于快速查找
+	ExceptionLimiter       []exceptionLimiter           `json:"exception_limiter"`
+	ExceptionLimiterMap    map[string]*exceptionLimiter `json:"-"` // 异常限制器, 用于快速查找
+	SkipLimitMethodsHelper []string                     `json:"skip_limit_methods"`
+	SkipLimitMethods       mapset.Set[string]           `json:"-"` // 跳过限制的方法, 用于快速查找
+	MaxBatchQuery          int                          `json:"max_batch_query"`
 }
 
 type exceptionLimiter struct {
@@ -39,14 +42,12 @@ func init() {
 		panic(err)
 	}
 
-	GlobalConfig.Domains = map[string]struct{}{}
-	for _, domain := range GlobalConfig.DomainsHelper {
-		GlobalConfig.Domains[domain] = struct{}{}
-	}
-
 	GlobalConfig.ExceptionLimiterMap = map[string]*exceptionLimiter{}
 	for _, exception := range GlobalConfig.ExceptionLimiter {
 		exception.Limter = limit.IPBasedRateLimiters{limit.NewIPBasedRateLimiter(exception.Limit, exception.Window*time.Second)}
 		GlobalConfig.ExceptionLimiterMap[exception.Domain] = &exception
 	}
+
+	GlobalConfig.Domains = mapset.NewSet(GlobalConfig.DomainsHelper...)
+	GlobalConfig.SkipLimitMethods = mapset.NewSet(GlobalConfig.SkipLimitMethodsHelper...)
 }
