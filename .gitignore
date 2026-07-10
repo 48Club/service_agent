@@ -23,3 +23,4 @@ config.json
 
 service_agent
 .DS_Store
+run.sh
