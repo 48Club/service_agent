@@ -19,6 +19,7 @@ func TestIsValidMethodName(t *testing.T) {
 		"eth_simulateV1",
 		"eth_call1",
 		"ETH_CALL",
+		"ethcall", // 下划线可以不出现
 		"_",
 		"", // 空方法名不含非法字符, 保持原有行为交由后端处理
 	}
@@ -39,6 +40,10 @@ func TestIsValidMethodName(t *testing.T) {
 		"eth_call\x00",
 		"eth_调用",
 		"eth_cäll",
+		"eth__call", // 下划线多于一次
+		"eth_call_",
+		"_eth_call",
+		"eth_signTypedData_v4",
 	}
 	for _, m := range invalid {
 		assert.False(t, isValidMethodName(m), "%q should be invalid", m)

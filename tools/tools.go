@@ -67,7 +67,7 @@ func DecodeRequestBody(host string, body []byte) (resp gin.H, buildRespByAgent b
 			return
 		}
 
-		// 方法名包含字母、数字和下划线以外的字符时, 直接由 agent 返回 method not available, 不再转发给后端
+		// 方法名不合法 (含字母、数字、下划线以外的字符, 或下划线多于一次) 时, 直接由 agent 返回 method not available, 不再转发给后端
 		if !isValidMethodName(web3Req.Method) {
 			resp, buildRespByAgent = methodNotAvailable(web3Req), true
 			return
@@ -115,11 +115,19 @@ func DecodeRequestBody(host string, body []byte) (resp gin.H, buildRespByAgent b
 	return
 }
 
-// isValidMethodName 检查 JSON-RPC 方法名是否仅包含 ASCII 字母、数字和下划线
+// isValidMethodName 检查 JSON-RPC 方法名是否仅包含 ASCII 字母、数字和下划线, 且下划线最多出现一次
 func isValidMethodName(m string) bool {
+	seenUnderscore := false
 	for i := 0; i < len(m); i++ {
 		c := m[i]
-		if (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_' {
+		if c == '_' {
+			if seenUnderscore {
+				return false
+			}
+			seenUnderscore = true
+			continue
+		}
+		if (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') {
 			continue
 		}
 		return false
