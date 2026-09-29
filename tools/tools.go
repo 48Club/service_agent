@@ -67,6 +67,12 @@ func DecodeRequestBody(host string, body []byte) (resp gin.H, buildRespByAgent b
 			return
 		}
 
+		// 方法名包含字母、数字和下划线以外的字符时, 直接由 agent 返回 method not available, 不再转发给后端
+		if !isValidMethodName(web3Req.Method) {
+			resp, buildRespByAgent = methodNotAvailable(web3Req), true
+			return
+		}
+
 		if config.GlobalConfig.SkipLimitMethods.ContainsOne(web3Req.Method) {
 			skipLimit = true
 			return
@@ -107,6 +113,29 @@ func DecodeRequestBody(host string, body []byte) (resp gin.H, buildRespByAgent b
 	}
 
 	return
+}
+
+// isValidMethodName 检查 JSON-RPC 方法名是否仅包含 ASCII 字母、数字和下划线
+func isValidMethodName(m string) bool {
+	for i := 0; i < len(m); i++ {
+		c := m[i]
+		if (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_' {
+			continue
+		}
+		return false
+	}
+	return true
+}
+
+func methodNotAvailable(i types.Web3ClientRequest) gin.H {
+	return gin.H{
+		"jsonrpc": i.JsonRPC,
+		"id":      i.Id,
+		"error": gin.H{
+			"code":    -32601,
+			"message": "the method " + i.Method + " does not exist/is not available",
+		},
+	}
 }
 
 func set1weiGasPrice(h string) (string, bool) {
