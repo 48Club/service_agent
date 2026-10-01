@@ -136,14 +136,10 @@ func isValidMethodName(m string) bool {
 }
 
 func methodNotAvailable(i types.Web3ClientRequest) gin.H {
-	return gin.H{
-		"jsonrpc": i.JsonRPC,
-		"id":      i.Id,
-		"error": gin.H{
-			"code":    -32601,
-			"message": "the method " + i.Method + " does not exist/is not available",
-		},
-	}
+	return buildGethResponse(i, gin.H{
+		"code":    -32601,
+		"message": "the method " + i.Method + " does not exist/is not available",
+	})
 }
 
 func set1weiGasPrice(h string) (string, bool) {
@@ -153,7 +149,7 @@ func set1weiGasPrice(h string) (string, bool) {
 	return "", false
 }
 
-func buildGethResponse(i types.Web3ClientRequest, result string) gin.H {
+func buildGethResponse(i types.Web3ClientRequest, result any) gin.H {
 	return gin.H{
 		"jsonrpc": i.JsonRPC,
 		"id":      i.Id,
